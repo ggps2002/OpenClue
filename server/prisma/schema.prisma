@@ -76,7 +76,25 @@ model MediaAsset {
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
   uploadedBy   User      @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  recording    Recording?
 
   @@index([workspaceId])
   @@index([projectId])
+}
+
+// Capture metadata for a video recorded in the browser. clicks is a JSON array of
+// { t: ms from start, x, y: 0..1 of the captured viewport }, used later for auto-zoom.
+// surface: "browser" | "window" | "monitor" | "unknown" (what the user chose to share).
+model Recording {
+  id           String     @id @default(cuid())
+  mediaAssetId String     @unique
+  durationMs   Int
+  width        Int
+  height       Int
+  surface      String
+  hasAudio     Boolean
+  clickCount   Int
+  clicks       Json
+  createdAt    DateTime   @default(now())
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
 }

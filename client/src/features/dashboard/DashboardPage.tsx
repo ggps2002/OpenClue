@@ -24,9 +24,14 @@ export function DashboardPage() {
         title={`Welcome${firstName ? `, ${firstName}` : ''}`}
         description="Pick up where you left off, or start something new."
         actions={
-          <Link to="/app/projects" className={buttonClasses('primary')}>
-            New project
-          </Link>
+          <>
+            <Link to="/app/record" className={buttonClasses('secondary')}>
+              Record screen
+            </Link>
+            <Link to="/app/projects" className={buttonClasses('primary')}>
+              New project
+            </Link>
+          </>
         }
       />
 

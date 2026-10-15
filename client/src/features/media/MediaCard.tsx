@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { formatBytes } from '../../lib/format';
+import { formatBytes, formatDuration } from '../../lib/format';
 import type { MediaAsset, MediaKind } from './media.api';
 
 const kindLabels: Record<MediaKind, string> = {
@@ -45,6 +45,12 @@ export function MediaCard({ asset, children }: { asset: MediaAsset; children?: R
           <p className="text-xs text-slate-500">
             {kindLabels[asset.kind]} · {formatBytes(asset.sizeBytes)}
           </p>
+          {asset.recording && (
+            <p className="mt-1 text-xs text-indigo-700">
+              Recorded · {formatDuration(asset.recording.durationMs)} · {asset.recording.clickCount}{' '}
+              {asset.recording.clickCount === 1 ? 'click' : 'clicks'}
+            </p>
+          )}
         </div>
         {children && <div className="mt-auto flex flex-wrap items-center gap-2">{children}</div>}
       </div>

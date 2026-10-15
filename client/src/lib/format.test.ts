@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatRelative } from './format';
+import { formatBytes, formatDuration, formatRelative } from './format';
 
 describe('formatBytes', () => {
   it('picks a sensible unit and precision', () => {
@@ -16,5 +16,13 @@ describe('formatRelative', () => {
     expect(formatRelative('2026-10-15T11:55:00Z', now)).toBe('5 min ago');
     expect(formatRelative('2026-10-15T09:00:00Z', now)).toBe('3 hr ago');
     expect(formatRelative('2026-10-14T12:00:00Z', now)).toBe('1 day ago');
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats as a clock', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(65_400)).toBe('1:05');
+    expect(formatDuration(3_723_000)).toBe('1:02:03');
   });
 });

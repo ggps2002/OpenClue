@@ -24,3 +24,12 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
   if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
   return new Date(iso).toLocaleDateString();
 }
+
+/** Clock-style duration, e.g. 65000 -> "1:05", 3723000 -> "1:02:03". */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}

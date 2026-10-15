@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert';
-import { Button } from '../../components/ui/Button';
+import { Button, buttonClasses } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Spinner } from '../../components/ui/Spinner';
 import { ApiError } from '../../lib/ApiClient';
@@ -84,6 +84,9 @@ export function ProjectDetailPage() {
         <ProjectTitle name={current.name} canEdit={canEdit} onRename={handleRename} />
         {canEdit && (
           <div className="flex items-center gap-2">
+            <Link to={`/app/record?projectId=${current.id}`} className={buttonClasses('secondary')}>
+              Record screen
+            </Link>
             <UploadButton
               workspaceId={current.workspaceId}
               projectId={current.id}

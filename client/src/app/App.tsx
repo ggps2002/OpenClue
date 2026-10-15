@@ -6,6 +6,7 @@ import { LandingPage } from '../features/landing/LandingPage';
 import { MediaLibraryPage } from '../features/media/MediaLibraryPage';
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
+import { RecordPage } from '../features/recorder/RecordPage';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from './AuthProvider';
 import { RequireAuth } from './RequireAuth';
@@ -31,6 +32,7 @@ export function AppRoutes() {
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
+        <Route path="record" element={<RecordPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

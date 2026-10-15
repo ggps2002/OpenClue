@@ -15,6 +15,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/app', end: true },
+  { label: 'Record', to: '/app/record' },
   { label: 'Projects', to: '/app/projects' },
   { label: 'Media library', to: '/app/media' },
   { label: 'Style templates', to: '/app/templates', soon: true },

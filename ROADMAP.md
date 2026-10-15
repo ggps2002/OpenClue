@@ -6,7 +6,7 @@ Each scheduled run takes the first unchecked milestone, builds a working slice, 
 
 - [x] 1. **Foundation.** Workspaces, client and server skeletons, `server.ts`, Prisma + SQLite, all root scripts working, README. Email/password auth (bcrypt, JWT in an httpOnly cookie) with sign-up, sign-in and sign-out. A public landing page with original copy describing the product. A signed-in app shell with sidebar navigation and an empty dashboard.
 - [x] 2. **Projects and media.** Create, rename and delete projects. Upload video, images, PDF and slide files (multer → StorageService). A per-workspace media library. A project detail page.
-- [ ] 3. **Browser screen recording.** Record screen + mic with getDisplayMedia + MediaRecorder from inside the app (a `ScreenRecorder` class), capture click positions and timestamps during recording (for auto-zoom later), and upload the result into a project.
+- [x] 3. **Browser screen recording.** Record screen + mic with getDisplayMedia + MediaRecorder from inside the app (a `ScreenRecorder` class), capture click positions and timestamps during recording (for auto-zoom later), and upload the result into a project.
 - [ ] 4. **Transcription and AI script.** Transcribe a recording's audio. Claude rewrites the rough narration into a clean script split into timed segments, which the user can edit.
 - [ ] 5. **AI voiceover.** Generate TTS audio per script segment, with a voice picker, synced to segment timing, and the option to regenerate one segment.
 - [ ] 6. **Video editor.** A timeline with scenes, tracks and clips (a `Timeline` model class): trim, split, reorder; text, shape and image overlays with keyframed position, scale and opacity; transitions between scenes; automatic zoom/spotlight effects from recorded click data, which the user can edit; a live preview player.
@@ -36,9 +36,20 @@ Stretch (only after 1–16): AI presenter avatars, an MCP server exposing projec
 
 - **2026-10-15 — Access checks via `requireWorkspaceRole()`** in `server/src/lib/access.ts`, called by services (not middleware) because the workspace is often derived from a loaded record. Roles rank viewer < editor < owner.
 - **2026-10-15 — Module routers mount at `/api`** and declare full paths (`/workspaces/:id/projects`, `/projects/:id`); `requireAuth` is applied per route so unknown `/api` paths still 404.
+- **2026-10-15 — Recording metadata lives in its own `Recording` table**, keyed by `mediaAssetId`, with clicks as Prisma `Json` (supported on both SQLite and Postgres). Media DTOs include only the small summary (`durationMs`, `clickCount`) via `mediaInclude`; full clicks come from `GET /api/media/:id/recording`.
+- **2026-10-15 — Clicks are stored normalised** (`x`, `y` in 0..1 of the page viewport, `t` in ms of recorded time excluding pauses) together with the shared surface (`browser`/`window`/`monitor`), so the editor can decide how reliable the mapping to the video frame is.
+- **2026-10-15 — `ScreenRecorder` takes a `RecorderEnvironment`** (mediaDevices, MediaRecorder, click target, clock) defaulting to browser globals, so tests run with fakes (`features/recorder/test-fakes.ts`) without a DI layer.
 - **2026-10-15 — Media files are served through the API** (`/api/media/:id/file`, cookie auth), never as static files, so access checks always apply.
 
 ## Progress log
+
+### 2026-10-15 — Milestone 3 (Browser screen recording) done
+- Prisma: `Recording` (one-to-one with `MediaAsset`, cascades on delete): duration, size, shared surface, audio flag, `clickCount` and `clicks` JSON (`{ t, x, y }`).
+- Server: `recordings` module — `POST /api/workspaces/:id/recordings` (multipart `file` + `metadata` JSON string + optional `projectId`; video only, zod-validated, temp file removed on any failure) and `GET /api/media/:id/recording`. Every media DTO now carries `recording: { durationMs, clickCount } | null`. `MediaService.load` is public for access checks from other modules.
+- Client: `ScreenRecorder` class (getDisplayMedia + optional mic, mixes mic and shared audio with Web Audio, pause/resume with paused time excluded, stops when the browser's "Stop sharing" is used, codec selection, click capture normalised to the viewport), `useScreenRecorder` hook, Record page (project picker, audio options, live timer and click count, preview/rename/save or discard), "Record" in the sidebar, dashboard and project page, recording badge on media cards.
+- Tests: 32 server, 25 client. typecheck/lint/test/build green; production build smoke-tested (sign-up → recording upload → metadata read back).
+- Next: Milestone 4 — Transcription and AI script. Add `FfmpegService` (ffmpeg-static) to extract audio; also use it to remux browser WebM uploads (`-c copy`) so they get a seekable duration (see known issues).
+- Known issues: MediaRecorder WebM files have no duration header, so players can't seek until remuxed (planned with `FfmpegService` in milestone 4). Click capture only sees clicks inside the OpenClue tab (browser security); other clicks will be added by hand in the editor or via the stretch Chrome extension.
 
 ### 2026-10-15 — Milestone 2 (Projects and media) done
 - Prisma: `Project` and `MediaAsset` (workspace-scoped; `projectId` is `SetNull` on project delete so files stay in the library).

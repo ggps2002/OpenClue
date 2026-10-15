@@ -15,6 +15,7 @@ const asset = (id: string, kind: MediaAsset['kind'], name: string): MediaAsset =
   workspaceId: 'w1',
   url: `/api/media/${id}/file`,
   createdAt: now,
+  recording: null,
 });
 const shot = asset('m1', 'image', 'shot.png');
 const guide = asset('m2', 'pdf', 'guide.pdf');

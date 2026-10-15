@@ -2,7 +2,7 @@ import type { Project } from '@prisma/client';
 import { requireWorkspaceRole, type Role } from '../../lib/access';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../middleware/error';
-import { MediaService, type MediaAssetDto } from '../media/media.service';
+import { MediaService, mediaInclude, type MediaAssetDto } from '../media/media.service';
 
 export interface ProjectSummary {
   id: string;
@@ -37,7 +37,11 @@ export class ProjectService {
 
   async get(userId: string, projectId: string): Promise<ProjectDetail> {
     const { project, role } = await this.load(userId, projectId, 'viewer');
-    const media = await prisma.mediaAsset.findMany({ where: { projectId }, orderBy: { createdAt: 'desc' } });
+    const media = await prisma.mediaAsset.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      include: mediaInclude,
+    });
     return { ...this.toSummary(project, media.length), role, media: media.map(MediaService.toDto) };
   }
 

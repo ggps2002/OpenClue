@@ -13,6 +13,8 @@ export interface MediaAsset {
   workspaceId: string;
   url: string;
   createdAt: string;
+  /** Set when the video was recorded in OpenClue. */
+  recording: { durationMs: number; clickCount: number } | null;
 }
 
 /** Value for the file input's `accept` attribute; the server re-checks every upload. */

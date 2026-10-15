@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { MediaAsset } from '@prisma/client';
+import type { MediaAsset, Prisma } from '@prisma/client';
 import { requireWorkspaceRole, type Role } from '../../lib/access';
 import { prisma } from '../../lib/prisma';
 import type { StorageService } from '../../lib/storage';
@@ -29,6 +29,13 @@ export function detectMediaKind(mimeType: string, fileName: string): MediaKind |
   return null;
 }
 
+/** Prisma `include` that loads the small recording summary every media DTO carries. */
+export const mediaInclude = {
+  recording: { select: { durationMs: true, clickCount: true } },
+} satisfies Prisma.MediaAssetInclude;
+
+type MediaAssetWithRecording = MediaAsset & { recording?: { durationMs: number; clickCount: number } | null };
+
 export interface MediaAssetDto {
   id: string;
   kind: MediaKind;
@@ -39,6 +46,8 @@ export interface MediaAssetDto {
   workspaceId: string;
   url: string;
   createdAt: string;
+  /** Set when the video was recorded in the browser. */
+  recording: { durationMs: number; clickCount: number } | null;
 }
 
 /** A file multer has already written to the storage temp dir. */
@@ -52,7 +61,7 @@ export interface UploadedFile {
 export class MediaService {
   constructor(private readonly storage: StorageService) {}
 
-  static toDto(this: void, asset: MediaAsset): MediaAssetDto {
+  static toDto(this: void, asset: MediaAssetWithRecording): MediaAssetDto {
     return {
       id: asset.id,
       kind: asset.kind as MediaKind,
@@ -63,6 +72,9 @@ export class MediaService {
       workspaceId: asset.workspaceId,
       url: `/api/media/${asset.id}/file`,
       createdAt: asset.createdAt.toISOString(),
+      recording: asset.recording
+        ? { durationMs: asset.recording.durationMs, clickCount: asset.recording.clickCount }
+        : null,
     };
   }
 
@@ -71,6 +83,7 @@ export class MediaService {
     const assets = await prisma.mediaAsset.findMany({
       where: { workspaceId, projectId: query.projectId, kind: query.kind },
       orderBy: { createdAt: 'desc' },
+      include: mediaInclude,
     });
     return assets.map(MediaService.toDto);
   }
@@ -116,6 +129,7 @@ export class MediaService {
     const updated = await prisma.mediaAsset.update({
       where: { id: mediaId },
       data: { originalName: input.name, projectId: input.projectId },
+      include: mediaInclude,
     });
     if (input.projectId) await this.touchProject(input.projectId);
     return MediaService.toDto(updated);
@@ -127,7 +141,8 @@ export class MediaService {
     await this.storage.remove(asset.storageKey);
   }
 
-  private async load(userId: string, mediaId: string, minRole: Role): Promise<MediaAsset> {
+  /** Loads an asset the user can access with at least `minRole`; 404 otherwise. */
+  async load(userId: string, mediaId: string, minRole: Role): Promise<MediaAsset> {
     const asset = await prisma.mediaAsset.findUnique({ where: { id: mediaId } });
     if (!asset) throw new HttpError(404, 'File not found');
     try {

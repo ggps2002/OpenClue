@@ -22,6 +22,10 @@ npm run dev      # API on http://localhost:4000, web app on http://localhost:517
 
 Open http://localhost:5173, create an account, and you land in the dashboard. Create a project, then upload
 videos, images, audio, PDFs or slide decks into it or into the workspace media library.
+Use **Record** (sidebar, dashboard or a project page) to capture your screen and microphone straight from
+the browser; clicks inside the OpenClue tab are saved with the recording for automatic zooms later.
+Screen recording needs a desktop browser with `getDisplayMedia` (recent Chrome, Edge or Firefox) and a
+secure context (`localhost` or HTTPS).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
 ## Scripts (run from the repo root)

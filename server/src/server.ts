@@ -12,6 +12,8 @@ import { MediaController } from './modules/media/media.controller';
 import { MediaService } from './modules/media/media.service';
 import { ProjectController } from './modules/projects/projects.controller';
 import { ProjectService } from './modules/projects/projects.service';
+import { RecordingController } from './modules/recordings/recordings.controller';
+import { RecordingService } from './modules/recordings/recordings.service';
 
 /** The OpenClue HTTP server: middleware, module routers, errors, static client, listen. */
 export class Server {
@@ -35,7 +37,9 @@ export class Server {
   private mountModules(): void {
     this.app.use('/api/auth', new AuthController(new AuthService()).router);
     this.app.use('/api', new ProjectController(new ProjectService()).router);
-    this.app.use('/api', new MediaController(new MediaService(this.storage), this.storage).router);
+    const media = new MediaService(this.storage);
+    this.app.use('/api', new MediaController(media, this.storage).router);
+    this.app.use('/api', new RecordingController(new RecordingService(media), this.storage).router);
   }
 
   private serveClient(): void {

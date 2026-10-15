@@ -26,6 +26,7 @@ const clip: MediaAsset = {
   workspaceId: 'w1',
   url: '/api/media/m1/file',
   createdAt: now,
+  recording: { durationMs: 65000, clickCount: 4 },
 };
 
 afterEach(() => {
@@ -78,6 +79,7 @@ describe('Projects', () => {
     await userEvent.upload(screen.getByLabelText('Upload files'), file);
     const card = await screen.findByText('take-1.webm');
     expect(within(card.closest('li') as HTMLElement).getByText('Video · 2.0 KB')).toBeInTheDocument();
+    expect(within(card.closest('li') as HTMLElement).getByText('Recorded · 1:05 · 4 clicks')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete project' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument();
