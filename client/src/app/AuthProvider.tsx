@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { authApi, type SignInInput, type SignUpInput, type User } from '../features/auth/auth.api';
+import { authApi, type SignInInput, type SignUpInput, type User, type WorkspaceSummary } from '../features/auth/auth.api';
 import { ApiError } from '../lib/ApiClient';
 
 interface AuthContextValue {
@@ -45,4 +45,12 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
   return ctx;
+}
+
+/** The workspace the signed-in user is working in. Only valid inside the signed-in app shell. */
+export function useCurrentWorkspace(): WorkspaceSummary {
+  const { user } = useAuth();
+  const workspace = user?.workspaces[0];
+  if (!workspace) throw new Error('useCurrentWorkspace needs a signed-in user with a workspace');
+  return workspace;
 }

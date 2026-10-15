@@ -16,6 +16,7 @@ const schema = z.object({
   DATABASE_URL: z.string().default('file:./dev.db'),
   JWT_SECRET: z.string().min(1).default(DEV_JWT_SECRET),
   STORAGE_DIR: z.string().default('storage'),
+  MAX_UPLOAD_MB: z.coerce.number().positive().default(500),
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-sonnet-5-5'),
   OPENAI_API_KEY: z.string().optional(),

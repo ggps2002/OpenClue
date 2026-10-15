@@ -34,12 +34,18 @@ export class ApiClient {
     return this.request<T>('DELETE', path);
   }
 
+  /** Sends multipart form data; the browser sets the multipart boundary header. */
+  upload<T>(path: string, form: FormData): Promise<T> {
+    return this.request<T>('POST', path, form);
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const isForm = body instanceof FormData;
     const res = await this.fetchFn(`${this.baseUrl}${path}`, {
       method,
       credentials: 'include',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined || isForm ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
     const text = await res.text();
     const data: unknown = text ? JSON.parse(text) : undefined;

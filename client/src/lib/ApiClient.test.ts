@@ -19,6 +19,21 @@ describe('ApiClient', () => {
     });
   });
 
+  it('uploads FormData without forcing a content type', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(201, { id: 'm1' }));
+    const client = new ApiClient('/api', fetchFn);
+    const form = new FormData();
+    form.append('file', new Blob(['x']), 'a.png');
+
+    await expect(client.upload('/media', form)).resolves.toEqual({ id: 'm1' });
+    expect(fetchFn).toHaveBeenCalledWith('/api/media', {
+      method: 'POST',
+      credentials: 'include',
+      headers: undefined,
+      body: form,
+    });
+  });
+
   it('handles empty responses', async () => {
     const client = new ApiClient('/api', vi.fn().mockResolvedValue(jsonResponse(204)));
     await expect(client.delete('/things/1')).resolves.toBeUndefined();

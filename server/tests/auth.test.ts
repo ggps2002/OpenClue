@@ -2,17 +2,10 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../src/middleware/auth';
 import { AuthService } from '../src/modules/auth/auth.service';
-import { createApp, resetDatabase } from './helpers';
+import { createApp, resetDatabase, sessionCookie } from './helpers';
 
 const app = createApp();
 const credentials = { name: 'Ada Lovelace', email: 'Ada@Example.com', password: 'correct-horse' };
-
-function sessionCookie(res: request.Response): string {
-  const cookies = res.headers['set-cookie'] as unknown as string[] | undefined;
-  const cookie = cookies?.find((c) => c.startsWith(`${SESSION_COOKIE}=`));
-  if (!cookie) throw new Error('No session cookie set');
-  return cookie.split(';')[0];
-}
 
 describe('AuthService', () => {
   const service = new AuthService();

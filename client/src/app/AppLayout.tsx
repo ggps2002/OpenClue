@@ -9,12 +9,14 @@ interface NavItem {
   to: string;
   /** Planned sections render disabled until their milestone ships. */
   soon?: boolean;
+  /** Only highlight on an exact match (otherwise nested routes count too). */
+  end?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', to: '/app' },
-  { label: 'Projects', to: '/app/projects', soon: true },
-  { label: 'Media library', to: '/app/media', soon: true },
+  { label: 'Dashboard', to: '/app', end: true },
+  { label: 'Projects', to: '/app/projects' },
+  { label: 'Media library', to: '/app/media' },
   { label: 'Style templates', to: '/app/templates', soon: true },
   { label: 'Brand kit', to: '/app/brand', soon: true },
 ];
@@ -51,7 +53,7 @@ export function AppLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end
+                end={item.end}
                 className={({ isActive }) =>
                   cn(
                     'block rounded-lg px-3 py-2 text-sm font-medium',

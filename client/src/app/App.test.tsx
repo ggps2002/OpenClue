@@ -1,25 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AppRoutes, routerFuture } from './App';
-import { AuthProvider } from './AuthProvider';
+import { renderAt, respond, testUser } from '../test-utils';
 
-const user = { id: 'u1', email: 'ada@example.com', name: 'Ada Lovelace', workspaces: [{ id: 'w1', name: "Ada's workspace", role: 'owner' }] };
-
-function respond(status: number, body?: unknown) {
-  return Promise.resolve(new Response(body === undefined ? null : JSON.stringify(body), { status }));
-}
-
-function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]} future={routerFuture}>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </MemoryRouter>,
-  );
-}
+const user = testUser;
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -33,7 +17,11 @@ describe('App routes', () => {
 
   it('redirects signed-out users from the app to sign in, then into the dashboard', async () => {
     const fetchMock = vi.fn((url: string) =>
-      url.endsWith('/auth/signin') ? respond(200, { user }) : respond(401, { error: 'Not signed in' }),
+      url.endsWith('/auth/signin')
+        ? respond(200, { user })
+        : url.endsWith('/projects')
+          ? respond(200, { projects: [] })
+          : respond(401, { error: 'Not signed in' }),
     );
     vi.stubGlobal('fetch', fetchMock);
     renderAt('/app');
@@ -70,7 +58,13 @@ describe('App routes', () => {
   it('signs out from the app shell', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn((url: string) => (url.endsWith('/auth/signout') ? respond(204) : respond(200, { user }))),
+      vi.fn((url: string) =>
+        url.endsWith('/auth/signout')
+          ? respond(204)
+          : url.endsWith('/projects')
+            ? respond(200, { projects: [] })
+            : respond(200, { user }),
+      ),
     );
     renderAt('/app');
     await userEvent.click(await screen.findByRole('button', { name: /sign out/i }));

@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 
 /** Throw from services/controllers for expected failures; mapped to a JSON response. */
@@ -19,6 +20,11 @@ export const notFoundHandler: RequestHandler = (_req, res) => {
 export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
   if (err instanceof HttpError) {
     res.status(err.status).json({ error: err.message });
+    return;
+  }
+  if (err instanceof MulterError) {
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? 'File is too large' : err.message });
     return;
   }
   if (err instanceof ZodError) {

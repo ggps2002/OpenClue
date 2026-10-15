@@ -5,7 +5,7 @@ Each scheduled run takes the first unchecked milestone, builds a working slice, 
 ## Milestones
 
 - [x] 1. **Foundation.** Workspaces, client and server skeletons, `server.ts`, Prisma + SQLite, all root scripts working, README. Email/password auth (bcrypt, JWT in an httpOnly cookie) with sign-up, sign-in and sign-out. A public landing page with original copy describing the product. A signed-in app shell with sidebar navigation and an empty dashboard.
-- [ ] 2. **Projects and media.** Create, rename and delete projects. Upload video, images, PDF and slide files (multer → StorageService). A per-workspace media library. A project detail page.
+- [x] 2. **Projects and media.** Create, rename and delete projects. Upload video, images, PDF and slide files (multer → StorageService). A per-workspace media library. A project detail page.
 - [ ] 3. **Browser screen recording.** Record screen + mic with getDisplayMedia + MediaRecorder from inside the app (a `ScreenRecorder` class), capture click positions and timestamps during recording (for auto-zoom later), and upload the result into a project.
 - [ ] 4. **Transcription and AI script.** Transcribe a recording's audio. Claude rewrites the rough narration into a clean script split into timed segments, which the user can edit.
 - [ ] 5. **AI voiceover.** Generate TTS audio per script segment, with a voice picker, synced to segment timing, and the option to regenerate one segment.
@@ -34,7 +34,21 @@ Stretch (only after 1–16): AI presenter avatars, an MCP server exposing projec
 - **2026-10-15 — Server is CommonJS** (`tsc` → `server/dist/src/server.js`); `server/tsconfig.json` also includes `tests/` so typecheck covers them. The root ESLint flat config is `eslint.config.mjs`.
 - **2026-10-15 — Server tests in `server/tests/`, client tests colocated.** Server tests share one SQLite DB and run without file parallelism.
 
+- **2026-10-15 — Access checks via `requireWorkspaceRole()`** in `server/src/lib/access.ts`, called by services (not middleware) because the workspace is often derived from a loaded record. Roles rank viewer < editor < owner.
+- **2026-10-15 — Module routers mount at `/api`** and declare full paths (`/workspaces/:id/projects`, `/projects/:id`); `requireAuth` is applied per route so unknown `/api` paths still 404.
+- **2026-10-15 — Media files are served through the API** (`/api/media/:id/file`, cookie auth), never as static files, so access checks always apply.
+
 ## Progress log
+
+### 2026-10-15 — Milestone 2 (Projects and media) done
+- Prisma: `Project` and `MediaAsset` (workspace-scoped; `projectId` is `SetNull` on project delete so files stay in the library).
+- Server: `StorageService` (`lib/storage.ts`, key-based, path-traversal guarded), `singleFileUpload` multer middleware (temp dir inside storage, `MAX_UPLOAD_MB` limit, 413/415 errors), `requireWorkspaceRole` (`lib/access.ts`, 404 for non-members, 403 for low roles).
+- Projects module: list/create per workspace, get (with media)/rename/delete by id.
+- Media module: upload (video/image/audio/PDF/slides detection by MIME + extension), list with `kind`/`projectId` filters, rename / move between projects, delete, and `GET /api/media/:id/file` streaming with Range support and a sandbox CSP.
+- Client: Projects page (create form, grid), project detail page (inline rename, upload, add from library, remove from project, delete), media library (type filters, move to project, delete), dashboard with recent projects. New UI primitives `EmptyState`, `PageHeader`; `ApiClient.upload`, `useAsync`, `format` helpers, shared `test-utils.tsx`.
+- Tests: 25 server (StorageService, ProjectService, MediaService, routes), 16 client. typecheck/lint/test/build green; production build smoke-tested (sign-up → project → upload).
+- Next: Milestone 3 — Browser screen recording (`ScreenRecorder` class, click capture, upload into a project; uploads go through the existing media endpoint, click data needs a new model/field).
+- Known issues: no upload progress bar (fetch has no upload progress; switch `ApiClient.upload` to XHR if needed); the UI always uses the first workspace until milestone 14 adds a switcher.
 
 ### 2026-10-15 — Milestone 1 (Foundation) done
 - npm workspaces (`server`, `client`) with root `dev`, `build`, `start`, `typecheck`, `lint`, `test`.

@@ -4,15 +4,20 @@ import cookieParser from 'cookie-parser';
 import express, { type Express } from 'express';
 import { env } from './config/env';
 import { prisma } from './lib/prisma';
+import { StorageService } from './lib/storage';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { MediaController } from './modules/media/media.controller';
+import { MediaService } from './modules/media/media.service';
+import { ProjectController } from './modules/projects/projects.controller';
+import { ProjectService } from './modules/projects/projects.service';
 
 /** The OpenClue HTTP server: middleware, module routers, errors, static client, listen. */
 export class Server {
   readonly app: Express = express();
 
-  constructor() {
+  constructor(private readonly storage = new StorageService()) {
     this.app.disable('x-powered-by');
     this.app.use(express.json({ limit: '1mb' }));
     this.app.use(cookieParser());
@@ -29,6 +34,8 @@ export class Server {
 
   private mountModules(): void {
     this.app.use('/api/auth', new AuthController(new AuthService()).router);
+    this.app.use('/api', new ProjectController(new ProjectService()).router);
+    this.app.use('/api', new MediaController(new MediaService(this.storage), this.storage).router);
   }
 
   private serveClient(): void {

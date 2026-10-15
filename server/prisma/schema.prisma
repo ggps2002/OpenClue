@@ -17,6 +17,8 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   memberships  Membership[]
+  projects     Project[]
+  mediaAssets  MediaAsset[]
 }
 
 model Workspace {
@@ -25,6 +27,8 @@ model Workspace {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   memberships Membership[]
+  projects    Project[]
+  mediaAssets MediaAsset[]
 }
 
 // role: "owner" | "editor" | "viewer" (string for SQLite/Postgres portability)
@@ -39,4 +43,40 @@ model Membership {
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  name        String
+  workspaceId String
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  mediaAssets MediaAsset[]
+
+  @@index([workspaceId])
+}
+
+// Uploaded files live in the workspace media library; projectId links an asset to a project
+// and is cleared (not cascaded) when the project is deleted.
+// kind: "video" | "image" | "audio" | "pdf" | "slides"
+model MediaAsset {
+  id           String    @id @default(cuid())
+  kind         String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String    @unique
+  workspaceId  String
+  projectId    String?
+  uploadedById String
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy   User      @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([projectId])
 }

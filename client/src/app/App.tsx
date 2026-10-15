@@ -3,6 +3,9 @@ import { SignInPage } from '../features/auth/SignInPage';
 import { SignUpPage } from '../features/auth/SignUpPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { LandingPage } from '../features/landing/LandingPage';
+import { MediaLibraryPage } from '../features/media/MediaLibraryPage';
+import { ProjectDetailPage } from '../features/projects/ProjectDetailPage';
+import { ProjectsPage } from '../features/projects/ProjectsPage';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from './AuthProvider';
 import { RequireAuth } from './RequireAuth';
@@ -25,6 +28,9 @@ export function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="projects" element={<ProjectsPage />} />
+        <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="media" element={<MediaLibraryPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

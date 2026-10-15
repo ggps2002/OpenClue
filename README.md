@@ -20,7 +20,8 @@ npm install      # installs both workspaces, creates server/.env from .env.examp
 npm run dev      # API on http://localhost:4000, web app on http://localhost:5173
 ```
 
-Open http://localhost:5173, create an account, and you land in the dashboard.
+Open http://localhost:5173, create an account, and you land in the dashboard. Create a project, then upload
+videos, images, audio, PDFs or slide decks into it or into the workspace media library.
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
 ## Scripts (run from the repo root)
@@ -47,6 +48,7 @@ Set in `server/.env` (copied from `server/.env.example` on install). Never commi
 | `DATABASE_URL`      | `file:./dev.db`      | Prisma connection string (SQLite path is relative to `server/prisma/`) |
 | `JWT_SECRET`        | dev-only fallback    | Signs session cookies; must be set in production              |
 | `STORAGE_DIR`       | `storage`            | Where uploaded and rendered media is stored                   |
+| `MAX_UPLOAD_MB`     | `500`                | Largest accepted upload, in megabytes                         |
 | `ANTHROPIC_API_KEY` | _(empty)_            | Enables Claude for scripts, docs, translation and planning    |
 | `AI_MODEL`          | `claude-sonnet-5-5`  | Claude model id                                               |
 | `OPENAI_API_KEY`    | _(empty)_            | Enables speech-to-text and text-to-speech                     |
