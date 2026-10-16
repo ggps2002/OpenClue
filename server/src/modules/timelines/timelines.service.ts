@@ -22,6 +22,8 @@ export interface TimelineSourceDto {
   url: string;
   /** Always null for images. */
   durationMs: number | null;
+  /** Clicks captured while recording in OpenClue (0 for other files); the editor turns them into zooms. */
+  clickCount: number;
 }
 
 export interface TimelineDto {
@@ -99,6 +101,8 @@ export class TimelineService {
         throw new HttpError(400, `${label} uses a video that is no longer in this project. Remove the scene to save.`);
       }
       assertWithin(source.durationMs, scene.outMs, `${label} ends after its video does`);
+      const lastZoom = scene.zooms?.at(-1);
+      if (lastZoom) assertWithin(source.durationMs, lastZoom.startMs + lastZoom.durationMs, `A zoom in ${label} runs past the end of its video`);
     });
     for (const track of doc.tracks) {
       if (track.kind === 'audio') {
@@ -145,7 +149,7 @@ export class TimelineService {
     const assets = await prisma.mediaAsset.findMany({
       where: { projectId, kind: { in: ['video', 'audio', 'image'] } },
       orderBy: { createdAt: 'asc' },
-      include: { recording: { select: { durationMs: true } } },
+      include: { recording: { select: { durationMs: true, clickCount: true } } },
     });
     const unknown = assets.filter((a) => a.durationMs === null && a.kind !== 'image');
     await mapLimit(unknown, PROBE_CONCURRENCY, async (asset) => {
@@ -160,6 +164,7 @@ export class TimelineService {
       kind: a.kind as TimelineSourceDto['kind'],
       url: `/api/media/${a.id}/file`,
       durationMs: a.durationMs,
+      clickCount: a.recording?.clickCount ?? 0,
     }));
   }
 

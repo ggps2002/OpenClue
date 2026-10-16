@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { formatTimecode } from '../../lib/format';
 import type { PlayerState, VideoSlot } from './TimelinePlayer';
 import { transitionStyles } from './transitions';
+import { spotlightBackground, zoomStyles, type ZoomView } from './zooms';
 
 interface PreviewPlayerProps {
   videoRefs: readonly [RefObject<HTMLVideoElement>, RefObject<HTMLVideoElement>];
@@ -10,21 +11,34 @@ interface PreviewPlayerProps {
   durationMs: number;
   onToggle(): void;
   onSeek(timeMs: number): void;
+  /** Zoom effects on the incoming (current) and outgoing scene, from `Timeline.zoomsAt`. */
+  zooms: { incoming: ZoomView | null; outgoing: ZoomView | null };
+  /** Picture width/height in each video slot. */
+  aspects: readonly [number, number];
   /** Drawn over the video, inside the 16:9 frame. */
   children?: ReactNode;
 }
 
-/** Shows the slot with the current scene; during a transition both slots show, styled by the transition. */
-function slotStyle(state: PlayerState, slot: VideoSlot): CSSProperties {
+/**
+ * Shows the slot with the current scene; during a transition both slots show, styled by the transition.
+ * A zoom scales the layer after any transition movement.
+ */
+function slotStyle(state: PlayerState, slot: VideoSlot, zoom: ZoomView | null, aspect: number): CSSProperties {
   const incoming = slot === state.slot;
   if (state.sceneId === null) return { opacity: 0 };
-  if (!state.transition) return { opacity: incoming ? 1 : 0, zIndex: incoming ? 1 : 0 };
-  const styles = transitionStyles(state.transition.type, state.transition.progress);
-  return { ...(incoming ? styles.to : styles.from), zIndex: incoming ? 1 : 0 };
+  const base: CSSProperties = state.transition
+    ? { ...transitionStyles(state.transition.type, state.transition.progress)[incoming ? 'to' : 'from'] }
+    : { opacity: incoming ? 1 : 0 };
+  if (zoom && zoom.scale > 1) {
+    base.transform = [base.transform, zoomStyles(zoom, aspect).transform].filter(Boolean).join(' ');
+    base.transformOrigin = '0 0';
+  }
+  return { ...base, zIndex: incoming ? 1 : 0 };
 }
 
 /** The live preview: two video elements driven by the TimelinePlayer (plus any overlays), with play/pause and a scrubber. */
-export function PreviewPlayer({ videoRefs, state, durationMs, onToggle, onSeek, children }: PreviewPlayerProps) {
+export function PreviewPlayer({ videoRefs, state, durationMs, onToggle, onSeek, zooms, aspects, children }: PreviewPlayerProps) {
+  const spotlight = state.sceneId !== null && zooms.incoming && zooms.incoming.spotlight > 0 ? zoomStyles(zooms.incoming, aspects[state.slot]).spotlight : null;
   return (
     <div className="self-start overflow-hidden rounded-2xl bg-slate-900">
       <div className="relative aspect-video overflow-hidden bg-black">
@@ -33,13 +47,16 @@ export function PreviewPlayer({ videoRefs, state, durationMs, onToggle, onSeek, 
             key={slot}
             ref={videoRefs[slot]}
             className="absolute inset-0 h-full w-full object-contain"
-            style={slotStyle(state, slot)}
+            style={slotStyle(state, slot, slot === state.slot ? zooms.incoming : zooms.outgoing, aspects[slot])}
             playsInline
             preload="auto"
             aria-label={slot === state.slot ? 'Preview' : undefined}
             aria-hidden={slot !== state.slot}
           />
         ))}
+        {spotlight && (
+          <div data-testid="spotlight" className="pointer-events-none absolute inset-0 z-[2]" style={{ background: spotlightBackground(spotlight) }} />
+        )}
         {state.sceneId === null && (
           <div className="absolute inset-0 z-[2] flex items-center justify-center text-sm text-slate-400">
             {durationMs === 0 ? 'Add a scene to see a preview' : 'End of video'}

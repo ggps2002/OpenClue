@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, renderAt, respond } from '../../test-utils';
 import type { ProjectDetail } from '../projects/projects.api';
-import type { TimelineDoc } from './Timeline';
+import type { TimelineDoc } from './timelineDoc';
 import type { TimelineData } from './timeline.api';
 
 const now = new Date().toISOString();
@@ -29,8 +29,8 @@ const empty: TimelineData = {
   role: 'owner',
   timeline: null,
   sources: [
-    { id: 'm0', name: 'old-take.webm', kind: 'video', url: '/api/media/m0/file', durationMs: 4000 },
-    { id: 'm1', name: 'take-1.webm', kind: 'video', url: '/api/media/m1/file', durationMs: 10000 },
+    { id: 'm0', name: 'old-take.webm', kind: 'video', url: '/api/media/m0/file', durationMs: 4000, clickCount: 0 },
+    { id: 'm1', name: 'take-1.webm', kind: 'video', url: '/api/media/m1/file', durationMs: 10000, clickCount: 3 },
   ],
   voiceover: { url: '/api/projects/p1/voiceover/track', durationMs: 8000 },
   updatedAt: null,
@@ -198,6 +198,47 @@ describe('EditorPage', () => {
       [300, 1, 0.51],
       [2700, 1, 0.51],
       [3000, 0, 0.51],
+    ]);
+  });
+
+  it('zooms in where the recording was clicked, and frames a zoom on the preview', async () => {
+    const fetchMock = mockApi({
+      'GET /projects/p1': () => respond(200, { project }),
+      'GET /projects/p1/timeline': () => respond(200, withTimeline),
+      'GET /media/m1/recording': () =>
+        respond(200, { recording: { clicks: [{ t: 2000, x: 0.2, y: 0.3 }, { t: 2500, x: 0.22, y: 0.3 }, { t: 7000, x: 0.9, y: 0.9 }] } }),
+      'PUT /projects/p1/timeline': (init) => respond(200, { ...withTimeline, timeline: (JSON.parse(String(init?.body)) as { timeline: TimelineDoc }).timeline }),
+    });
+    renderAt('/app/projects/p1/editor');
+
+    const strip = await screen.findByLabelText('Timeline');
+    await userEvent.click(within(strip).getByRole('button', { name: /^Scene 1/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Auto-zoom from 3 clicks' }));
+    expect(await screen.findByText('Added 2 zooms from your clicks.')).toBeInTheDocument();
+    expect(within(strip).getByRole('button', { name: 'Zoom at 0:01.3, 180%' })).toBeInTheDocument();
+
+    // On the playhead the preview video is zoomed in.
+    fireEvent.change(screen.getByLabelText('Playhead'), { target: { value: '2500' } });
+    expect(screen.getByLabelText('Preview').style.transform).toContain('scale(1.8000)');
+
+    await userEvent.click(screen.getByRole('button', { name: /Zoom at 0:01.3, 180%/, pressed: false }));
+    const inspector = screen.getByLabelText('Inspector');
+    expect(within(inspector).getByRole('heading', { name: 'Zoom' })).toBeInTheDocument();
+    // While selected the zoom is shown as an outline instead.
+    expect(screen.getByLabelText('Preview').style.transform).toBe('');
+    const area = within(screen.getByTestId('zoom-framing')).getByRole('button', { name: /Zoom area/ });
+    // The focus (x 0.21) is near the edge, so the area starts from where the view stops (x 0.278) and moves from there.
+    fireEvent.keyDown(area, { key: 'ArrowRight' });
+    await userEvent.click(within(inspector).getByLabelText('Spotlight the focus point'));
+    await userEvent.click(within(inspector).getByRole('button', { name: 'Back to scene' }));
+    expect(screen.getByTestId('spotlight')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument();
+    const saved = sentBody(fetchMock, 'PUT') as { timeline: TimelineDoc };
+    expect(saved.timeline.scenes[0].zooms).toEqual([
+      { id: expect.any(String), startMs: 1300, durationMs: 2700, x: 0.288, y: 0.3, scale: 1.8, spotlight: true },
+      { id: expect.any(String), startMs: 6300, durationMs: 2200, x: 0.9, y: 0.9, scale: 1.8, spotlight: false },
     ]);
   });
 

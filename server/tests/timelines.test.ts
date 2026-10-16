@@ -212,6 +212,31 @@ describe('TimelineService', () => {
     expect(parse(withTransition(1, { type: 'spin' as 'fade', durationMs: 200 }))).toBe(false);
   });
 
+  it('reports recorded clicks on sources and saves zooms in source time', async () => {
+    await prisma.recording.create({
+      data: { mediaAssetId: videoId, durationMs: 2000, width: 1280, height: 720, surface: 'browser', hasAudio: false, clickCount: 2, clicks: [{ t: 300, x: 0.2, y: 0.3 }, { t: 900, x: 0.8, y: 0.7 }] },
+    });
+    expect((await service.get(owner.id, projectId)).sources[0]).toMatchObject({ id: videoId, clickCount: 2 });
+
+    const zoom = (id: string, startMs: number, durationMs = 600) => ({ id, startMs, durationMs, x: 0.2, y: 0.3, scale: 2, spotlight: true });
+    const withZooms = (zooms: ReturnType<typeof zoom>[]) => {
+      const base = doc(videoId);
+      base.scenes[0] = { ...base.scenes[0], zooms };
+      return base;
+    };
+    // Zooms may sit outside the scene's in/out points (kept for when it is trimmed back).
+    const saved = await service.save(owner.id, projectId, withZooms([zoom('z1', 0), zoom('z2', 1300)]));
+    expect(saved.timeline?.scenes[0].zooms?.map((z) => z.id)).toEqual(['z1', 'z2']);
+    await expect(service.save(owner.id, projectId, withZooms([zoom('z1', 1800)]))).rejects.toThrow(/zoom in Intro runs past the end/);
+
+    const parse = (d: TimelineDoc) => timelineDocSchema.safeParse(d).success;
+    expect(parse(withZooms([zoom('z1', 0), zoom('z2', 500)]))).toBe(false);
+    expect(parse(withZooms([zoom('z2', 1000), zoom('z1', 0)]))).toBe(false);
+    expect(parse(withZooms([zoom('z1', 0, 300)]))).toBe(false);
+    expect(parse(withZooms([{ ...zoom('z1', 0), scale: 5 }]))).toBe(false);
+    expect(parse(withZooms([zoom('s2', 0)]))).toBe(false);
+  });
+
   it('is removed with its project', async () => {
     await service.create(owner.id, projectId);
     await projects.delete(owner.id, projectId);

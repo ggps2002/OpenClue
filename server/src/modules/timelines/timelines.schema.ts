@@ -11,6 +11,10 @@ export const MIN_TRANSITION_MS = 100;
 export const MAX_TRANSITION_MS = 5000;
 /** Same names as ffmpeg's xfade transitions so the render can pass them straight through. */
 export const TRANSITION_TYPES = ['fade', 'fadeblack', 'wipeleft', 'wiperight', 'slideleft', 'slideup'] as const;
+export const MAX_ZOOMS_PER_SCENE = 200;
+/** A zoom eases in and out, so it needs some room to be seen at full strength. */
+export const MIN_ZOOM_MS = 500;
+export const MAX_ZOOM_SCALE = 4;
 
 const id = z.string().min(1).max(64);
 const ms = z.number().int().min(0);
@@ -19,6 +23,21 @@ const ms = z.number().int().min(0);
 export const transitionSchema = z.object({
   type: z.enum(TRANSITION_TYPES),
   durationMs: z.number().int().min(MIN_TRANSITION_MS).max(MAX_TRANSITION_MS),
+});
+
+/**
+ * A zoom (with optional spotlight) on a point of the scene's video. Times are in the source video's
+ * clock, so zooms stay on the moment they belong to when the scene is trimmed, split or moved. x/y are
+ * fractions of the source video's picture (the same space as recorded clicks).
+ */
+export const zoomSchema = z.object({
+  id,
+  startMs: ms,
+  durationMs: ms.min(MIN_ZOOM_MS),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  scale: z.number().min(1).max(MAX_ZOOM_SCALE),
+  spotlight: z.boolean(),
 });
 
 /** A cut of a source video between `inMs` and `outMs`. Scenes play back to back in order. */
@@ -33,8 +52,20 @@ export const sceneSchema = z
     muted: z.boolean(),
     /** Transition from the previous scene into this one; absent or null is a hard cut. */
     transition: transitionSchema.nullable().optional(),
+    /** In source time, ordered and not overlapping; zooms outside inMs..outMs are kept but not shown. */
+    zooms: z.array(zoomSchema).max(MAX_ZOOMS_PER_SCENE).optional(),
   })
-  .refine((s) => s.outMs - s.inMs >= MIN_CLIP_MS, { message: `A scene must be at least ${MIN_CLIP_MS} ms long`, path: ['outMs'] });
+  .superRefine((scene, ctx) => {
+    if (scene.outMs - scene.inMs < MIN_CLIP_MS) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `A scene must be at least ${MIN_CLIP_MS} ms long`, path: ['outMs'] });
+    }
+    scene.zooms?.forEach((zoom, i) => {
+      const previous = scene.zooms?.[i - 1];
+      if (previous && zoom.startMs < previous.startMs + previous.durationMs) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Zooms must be in time order and not overlap', path: ['zooms', i, 'startMs'] });
+      }
+    });
+  });
 
 export const audioSourceSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('voiceover') }),
@@ -131,7 +162,10 @@ export const timelineDocSchema = z
       if (ids.has(value)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Ids must be unique', path });
       ids.add(value);
     };
-    doc.scenes.forEach((s, i) => check(s.id, ['scenes', i, 'id']));
+    doc.scenes.forEach((s, i) => {
+      check(s.id, ['scenes', i, 'id']);
+      s.zooms?.forEach((z, j) => check(z.id, ['scenes', i, 'zooms', j, 'id']));
+    });
     checkTransitions(doc.scenes, ctx);
     doc.tracks.forEach((t, i) => {
       check(t.id, ['tracks', i, 'id']);
@@ -163,6 +197,7 @@ export const createTimelineSchema = z.object({ mediaId: id.optional() });
 
 export type TimelineDoc = z.infer<typeof timelineDocSchema>;
 export type Scene = z.infer<typeof sceneSchema>;
+export type Zoom = z.infer<typeof zoomSchema>;
 export type Transition = z.infer<typeof transitionSchema>;
 export type Track = z.infer<typeof trackSchema>;
 export type AudioTrack = z.infer<typeof audioTrackSchema>;

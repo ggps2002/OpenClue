@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createOverlay } from './overlays';
-import { Timeline, type TimelineDoc } from './Timeline';
+import { Timeline } from './Timeline';
+import type { TimelineDoc } from './timelineDoc';
 
 function make(doc: Partial<TimelineDoc> = {}) {
   let n = 0;
@@ -157,5 +158,26 @@ describe('Timeline', () => {
     // Removing the last overlay of a track removes the track.
     const removed = timeline.removeClip(trackId, 'o1');
     expect(removed.overlayTracks.map((t) => t.clips.map((c) => c.id))).toEqual([['o2']]);
+  });
+
+  it('keeps zooms in source time across splits and transitions', () => {
+    const zoom = { id: 'z', startMs: 1000, durationMs: 2000, x: 0.3, y: 0.6, scale: 2, spotlight: false };
+    let timeline = make().addZoom('a', zoom);
+    expect(timeline.addZoom('a', { ...zoom, id: 'overlap', startMs: 2500 })).toBe(timeline);
+    expect(timeline.zoomsAt(2000)).toEqual({ incoming: expect.objectContaining({ zoomId: 'z', scale: 2 }), outgoing: null });
+
+    timeline = timeline.splitAt(2000);
+    expect(timeline.scenes.map((s) => s.zooms?.map((z) => z.id))).toEqual([['z'], ['new-1'], undefined]);
+    expect(timeline.visibleZooms(timeline.scenes[1])).toHaveLength(1);
+    expect(timeline.visibleZooms(timeline.scene('b')!)).toEqual([]);
+
+    // During a transition the outgoing scene keeps its zoom.
+    timeline = timeline.setTransition(timeline.scenes[1].id, { type: 'fade', durationMs: 500 });
+    expect(timeline.zoomsAt(1800).outgoing).toMatchObject({ zoomId: 'z' });
+
+    timeline = timeline.updateZoom('z', { scale: 3, durationMs: 100 }).removeZoom('new-1');
+    expect(timeline.zoom('z')?.zoom).toMatchObject({ scale: 3, durationMs: 500 });
+    expect(timeline.zoom('new-1')).toBeUndefined();
+    expect(timeline.setZooms('a', [{ ...zoom, id: 'late', startMs: 3000 }, zoom]).scenes[0].zooms?.map((z) => z.id)).toEqual(['z', 'late']);
   });
 });

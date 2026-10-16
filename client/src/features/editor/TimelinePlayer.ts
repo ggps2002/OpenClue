@@ -1,4 +1,5 @@
-import { clipLength, type AudioSource, type PlacedScene, type Timeline } from './Timeline';
+import type { PlacedScene, Timeline } from './Timeline';
+import { clipLength, type AudioSource } from './timelineDoc';
 import { transitionVolumes, type TransitionType } from './transitions';
 
 /** The parts of a media element the player drives; real <video>/<audio> elements satisfy it. */

@@ -3,13 +3,16 @@ import { cn } from '../../lib/cn';
 import { formatDuration, formatTimecode } from '../../lib/format';
 import { overlayLabel, type OverlayTrack } from './overlays';
 import { TRANSITION_LABELS } from './transitions';
-import { clipLength, type AudioTrack, type Timeline } from './Timeline';
+import type { Timeline } from './Timeline';
+import { clipLength, type AudioTrack } from './timelineDoc';
+import { zoomEnd } from './zooms';
 import type { TimelineSource } from './timeline.api';
 
 export type Selection =
   | { kind: 'scene'; id: string }
   | { kind: 'clip'; trackId: string; clipId: string }
   | { kind: 'overlay'; clipId: string }
+  | { kind: 'zoom'; zoomId: string }
   | null;
 
 interface TimelineStripProps {
@@ -117,6 +120,29 @@ export function TimelineStrip(props: TimelineStripProps) {
                 style={{ left: pct(startMs, total), width: pct(scene.transition.durationMs, total) }}
               />
             ) : null,
+          )}
+          {timeline.placements().flatMap(({ scene, startMs, endMs }) =>
+            timeline.visibleZooms(scene).map((zoom) => {
+              const from = Math.max(startMs, startMs + zoom.startMs - scene.inMs);
+              const to = Math.min(endMs, startMs + zoomEnd(zoom) - scene.inMs);
+              const selected = selection?.kind === 'zoom' && selection.zoomId === zoom.id;
+              return (
+                <button
+                  key={zoom.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    seekFromLane(e);
+                    onSelect({ kind: 'zoom', zoomId: zoom.id });
+                  }}
+                  aria-pressed={selected}
+                  aria-label={`Zoom at ${formatTimecode(from)}, ${Math.round(zoom.scale * 100)}%`}
+                  title={`Zoom ${Math.round(zoom.scale * 100)}%${zoom.spotlight ? ' with spotlight' : ''}`}
+                  className={cn('absolute bottom-1 z-[1] h-2 rounded-sm bg-violet-500/80 hover:bg-violet-600', selected && 'ring-2 ring-violet-800')}
+                  style={{ left: pct(from, total), width: pct(to - from, total) }}
+                />
+              );
+            }),
           )}
           {playhead}
         </div>

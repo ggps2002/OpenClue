@@ -10,6 +10,7 @@ import { timelineApi, type TimelineData } from './timeline.api';
 import { TimelineStrip, type Selection } from './TimelineStrip';
 import { useTimelineHistory } from './useTimelineHistory';
 import { useTimelinePlayer } from './useTimelinePlayer';
+import { ZoomFraming } from './ZoomFraming';
 
 interface EditorWorkspaceProps {
   data: TimelineData & { timeline: NonNullable<TimelineData['timeline']> };
@@ -28,6 +29,12 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
   const [error, setError] = useState<string>();
   const dirty = timeline.doc !== saved;
   const { timeMs } = player.state;
+  const framingZoomId = selection?.kind === 'zoom' ? selection.zoomId : null;
+  // The selected zoom is shown unzoomed with its framing outlined, so it can be repositioned.
+  const zooms = useMemo(() => {
+    const { incoming, outgoing } = timeline.zoomsAt(timeMs);
+    return { incoming: incoming?.zoomId === framingZoomId ? null : incoming, outgoing };
+  }, [timeline, timeMs, framingZoomId]);
   const imageUrls = useMemo(() => new Map(data.sources.filter((s) => s.kind === 'image').map((s) => [s.id, s.url])), [data.sources]);
 
   const save = async () => {
@@ -111,7 +118,19 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
           durationMs={timeline.durationMs}
           onToggle={player.toggle}
           onSeek={player.seek}
+          zooms={zooms}
+          aspects={player.aspects}
         >
+          {framingZoomId && (
+            <ZoomFraming
+              timeline={timeline}
+              timeMs={timeMs}
+              zoomId={framingZoomId}
+              aspect={player.aspects[player.state.slot]}
+              canEdit={canEdit}
+              onMove={(zoomId, focus) => apply((t) => t.updateZoom(zoomId, focus))}
+            />
+          )}
           <OverlayLayer
             timeline={timeline}
             timeMs={timeMs}

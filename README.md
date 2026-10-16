@@ -47,6 +47,12 @@ Select any scene after the first to give it a **transition** from the scene befo
 black, wipe or slide). The two scenes overlap for the transition's length, so the video gets that much
 shorter; a transition can last at most half of each scene it joins and is shortened automatically when you
 trim. "Use on every cut" applies the same transition everywhere.
+**Zoom and spotlight:** a scene recorded in OpenClue offers "Auto-zoom from N clicks", which zooms in on
+the places you clicked (nearby clicks share one zoom; the camera eases in a little before and holds after).
+You can also add a zoom at the playhead. Selecting a zoom (in the scene's list or the violet marker on the
+timeline) shows its framing on the preview: drag the outline to change what it zooms in on, and set its
+start, length, strength (up to 400%) and an optional spotlight that dims everything around the focus point.
+Zooms follow the source video, so they stay with their moment when you trim, split or reorder scenes.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 

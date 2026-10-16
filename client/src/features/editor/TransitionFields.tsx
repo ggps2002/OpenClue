@@ -2,7 +2,8 @@ import { useId } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatTimecode } from '../../lib/format';
 import { SecondsField } from './fields';
-import { clipLength, type Timeline } from './Timeline';
+import type { Timeline } from './Timeline';
+import { clipLength } from './timelineDoc';
 import {
   DEFAULT_TRANSITION_MS,
   maxTransitionMs,

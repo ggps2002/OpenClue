@@ -1,46 +1,7 @@
 import type { OverlayClip, OverlayTrack } from './overlays';
+import { clipLength, MIN_CLIP_MS, type AudioTrack, type Scene, type TimelineDoc, type Track } from './timelineDoc';
 import { fitTransitions, type Transition, type TransitionType } from './transitions';
-
-/** Mirrors server/src/modules/timelines/timelines.schema.ts. */
-export interface Scene {
-  id: string;
-  name: string;
-  mediaId: string;
-  inMs: number;
-  outMs: number;
-  /** Silences the video's own sound. */
-  muted: boolean;
-  /** Transition from the previous scene into this one; absent or null is a hard cut. */
-  transition?: Transition | null;
-}
-
-export type AudioSource = { type: 'voiceover' } | { type: 'media'; mediaId: string };
-
-export interface AudioClip {
-  id: string;
-  source: AudioSource;
-  /** Where the clip starts on the timeline. */
-  startMs: number;
-  inMs: number;
-  outMs: number;
-}
-
-export interface AudioTrack {
-  id: string;
-  kind: 'audio';
-  name: string;
-  muted: boolean;
-  clips: AudioClip[];
-}
-
-export type Track = AudioTrack | OverlayTrack;
-
-export interface TimelineDoc {
-  version: 1;
-  scenes: Scene[];
-  /** Audio and overlay tracks; later overlay tracks are drawn on top. */
-  tracks: Track[];
-}
+import { splitZooms, updateZoom, zoomAt, zoomEnd, type Zoom, type ZoomView } from './zooms';
 
 /** A scene with its position on the timeline. */
 export interface PlacedScene {
@@ -58,10 +19,6 @@ export interface ActiveTransition {
   /** 0 at the start of the overlap, approaching 1 at its end. */
   progress: number;
 }
-
-export const MIN_CLIP_MS = 100;
-
-export const clipLength = (clip: { inMs: number; outMs: number }) => clip.outMs - clip.inMs;
 
 const defaultId = () => crypto.randomUUID();
 
@@ -161,8 +118,9 @@ export class Timeline {
     const hit = this.sceneAt(timeMs);
     if (!hit || !this.canSplitAt(timeMs)) return this;
     const { scene, sourceMs } = hit;
-    const first = { ...scene, outMs: sourceMs };
-    const second = { ...scene, id: this.createId(), name: nextName(scene.name), inMs: sourceMs, transition: null };
+    const [firstZooms, secondZooms] = splitZooms(scene.zooms, sourceMs, this.createId);
+    const first = { ...scene, outMs: sourceMs, zooms: firstZooms };
+    const second = { ...scene, id: this.createId(), name: nextName(scene.name), inMs: sourceMs, transition: null, zooms: secondZooms };
     const scenes = [...this.doc.scenes];
     scenes.splice(hit.index, 1, first, second);
     return this.with({ scenes });
@@ -273,6 +231,53 @@ export class Timeline {
     const found = this.overlay(clipId);
     if (!found) return this;
     return this.updateTrack(found.track.id, (t) => (t.kind === 'overlay' ? { ...t, clips: t.clips.map((c) => (c.id === clipId ? update(c) : c)) } : t));
+  }
+
+  /** The scene's zooms that show between its in and out points. */
+  visibleZooms(scene: Scene): Zoom[] {
+    return (scene.zooms ?? []).filter((z) => zoomEnd(z) > scene.inMs && z.startMs < scene.outMs);
+  }
+
+  zoom(zoomId: string): { scene: Scene; zoom: Zoom } | undefined {
+    for (const scene of this.doc.scenes) {
+      const zoom = scene.zooms?.find((z) => z.id === zoomId);
+      if (zoom) return { scene, zoom };
+    }
+    return undefined;
+  }
+
+  /** Zoom effects on screen at `timeMs`: on the scene playing and, during a transition, the outgoing one. */
+  zoomsAt(timeMs: number): { incoming: ZoomView | null; outgoing: ZoomView | null } {
+    const incoming = this.sceneAt(timeMs);
+    const transition = this.transitionAt(timeMs);
+    return {
+      incoming: incoming ? zoomAt(incoming.scene.zooms, incoming.sourceMs) : null,
+      outgoing: transition ? zoomAt(transition.from.scene.zooms, transition.from.sourceMs) : null,
+    };
+  }
+
+  /** Replaces a scene's zooms (sorted by start; the caller keeps them apart). */
+  setZooms(sceneId: string, zooms: Zoom[]): Timeline {
+    return this.updateScene(sceneId, (scene) => ({ ...scene, zooms: [...zooms].sort((a, b) => a.startMs - b.startMs) }));
+  }
+
+  addZoom(sceneId: string, zoom: Zoom): Timeline {
+    const scene = this.scene(sceneId);
+    if (!scene || (scene.zooms ?? []).some((z) => z.startMs < zoomEnd(zoom) && zoomEnd(z) > zoom.startMs)) return this;
+    return this.setZooms(sceneId, [...(scene.zooms ?? []), zoom]);
+  }
+
+  /** Changes one zoom, kept between its neighbours and inside the source (`sourceDurationMs`). */
+  updateZoom(zoomId: string, changes: Partial<Omit<Zoom, 'id'>>, sourceDurationMs?: number): Timeline {
+    const found = this.zoom(zoomId);
+    if (!found) return this;
+    return this.updateScene(found.scene.id, (scene) => ({ ...scene, zooms: updateZoom(scene.zooms ?? [], zoomId, changes, sourceDurationMs) }));
+  }
+
+  removeZoom(zoomId: string): Timeline {
+    const found = this.zoom(zoomId);
+    if (!found) return this;
+    return this.updateScene(found.scene.id, (scene) => ({ ...scene, zooms: scene.zooms?.filter((z) => z.id !== zoomId) }));
   }
 
   toJSON(): TimelineDoc {

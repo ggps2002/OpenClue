@@ -4,10 +4,12 @@ import { formatTimecode } from '../../lib/format';
 import { NameField, SecondsField } from './fields';
 import { OverlayInspector } from './OverlayInspector';
 import { createOverlay, type OverlayKind } from './overlays';
-import { clipLength, type Timeline } from './Timeline';
+import type { Timeline } from './Timeline';
+import { clipLength } from './timelineDoc';
 import type { TimelineSource } from './timeline.api';
 import type { Selection } from './TimelineStrip';
 import { TransitionFields } from './TransitionFields';
+import { ZoomInspector, ZoomSection } from './ZoomInspector';
 
 interface InspectorProps {
   timeline: Timeline;
@@ -20,7 +22,7 @@ interface InspectorProps {
   onSeek(timeMs: number): void;
 }
 
-/** Side panel for the selected scene, audio clip or overlay; offers "add scene/overlay" when nothing is selected. */
+/** Side panel for the selected scene, audio clip, overlay or zoom; offers "add scene/overlay" when nothing is selected. */
 export function Inspector(props: InspectorProps) {
   const { timeline, selection } = props;
   const scene = selection?.kind === 'scene' ? timeline.placement(selection.id) : undefined;
@@ -36,6 +38,8 @@ export function Inspector(props: InspectorProps) {
         <ClipInspector {...props} track={track} clip={clip} />
       ) : overlay ? (
         <OverlayInspector {...props} {...overlay} onRemoved={() => props.onSelect(null)} />
+      ) : selection?.kind === 'zoom' && timeline.zoom(selection.zoomId) ? (
+        <ZoomInspector {...props} zoomId={selection.zoomId} />
       ) : (
         <Overview {...props} />
       )}
@@ -102,6 +106,7 @@ function SceneInspector({ timeline, sources, timeMs, canEdit, apply, onSelect, o
         </>
       )}
       {index > 0 && <TransitionFields timeline={timeline} sceneIndex={index} canEdit={canEdit} apply={apply} onSeek={onSeek} />}
+      {source && <ZoomSection {...{ timeline, placed, source, timeMs, canEdit, apply, onSelect, onSeek }} />}
     </div>
   );
 }
@@ -165,6 +170,7 @@ function Overview({ timeline, sources, timeMs, canEdit, apply, onSelect }: Inspe
       <ul className="list-disc space-y-1 pl-4 text-xs">
         <li>Space plays or pauses, S splits the scene under the playhead.</li>
         <li>Ctrl+Z undoes, Ctrl+Shift+Z redoes.</li>
+        <li>Select a scene to add zooms, or to zoom in automatically where you clicked while recording.</li>
       </ul>
       {canEdit && videos.length > 0 && (
         <div className="space-y-2 border-t border-slate-200 pt-4">
