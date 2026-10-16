@@ -1,0 +1,100 @@
+// SQLite for zero-setup local dev. The schema stays Postgres-compatible:
+// switch `provider` to "postgresql" and point DATABASE_URL at Postgres.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  memberships  Membership[]
+  projects     Project[]
+  mediaAssets  MediaAsset[]
+}
+
+model Workspace {
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+  projects    Project[]
+  mediaAssets MediaAsset[]
+}
+
+// role: "owner" | "editor" | "viewer" (string for SQLite/Postgres portability)
+model Membership {
+  id          String    @id @default(cuid())
+  role        String    @default("owner")
+  userId      String
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  name        String
+  workspaceId String
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  mediaAssets MediaAsset[]
+
+  @@index([workspaceId])
+}
+
+// Uploaded files live in the workspace media library; projectId links an asset to a project
+// and is cleared (not cascaded) when the project is deleted.
+// kind: "video" | "image" | "audio" | "pdf" | "slides"
+model MediaAsset {
+  id           String    @id @default(cuid())
+  kind         String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String    @unique
+  workspaceId  String
+  projectId    String?
+  uploadedById String
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy   User      @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  recording    Recording?
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// Capture metadata for a video recorded in the browser. clicks is a JSON array of
+// { t: ms from start, x, y: 0..1 of the captured viewport }, used later for auto-zoom.
+// surface: "browser" | "window" | "monitor" | "unknown" (what the user chose to share).
+model Recording {
+  id           String     @id @default(cuid())
+  mediaAssetId String     @unique
+  durationMs   Int
+  width        Int
+  height       Int
+  surface      String
+  hasAudio     Boolean
+  clickCount   Int
+  clicks       Json
+  createdAt    DateTime   @default(now())
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+}
