@@ -19,6 +19,8 @@ import { RecordingController } from './modules/recordings/recordings.controller'
 import { RecordingService } from './modules/recordings/recordings.service';
 import { ScriptController } from './modules/scripts/scripts.controller';
 import { ScriptService } from './modules/scripts/scripts.service';
+import { TimelineController } from './modules/timelines/timelines.controller';
+import { TimelineService } from './modules/timelines/timelines.service';
 import { TranscriptController } from './modules/transcripts/transcripts.controller';
 import { TranscriptService } from './modules/transcripts/transcripts.service';
 import { VoiceoverController } from './modules/voiceovers/voiceovers.controller';
@@ -66,6 +68,8 @@ export class Server {
     this.app.use('/api', new ScriptController(scripts).router);
     const voiceovers = new VoiceoverService(scripts, this.storage, this.ffmpeg, this.speech);
     this.app.use('/api', new VoiceoverController(voiceovers).router);
+    const timelines = new TimelineService(projects, voiceovers, this.storage, this.ffmpeg);
+    this.app.use('/api', new TimelineController(timelines).router);
   }
 
   private serveClient(): void {

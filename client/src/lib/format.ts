@@ -33,3 +33,9 @@ export function formatDuration(ms: number): string {
   const s = String(total % 60).padStart(2, '0');
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
+
+/** Duration with tenths of a second for editing, e.g. 65430 -> "1:05.4". */
+export function formatTimecode(ms: number): string {
+  const tenths = Math.max(0, Math.floor(ms / 100));
+  return `${formatDuration(Math.floor(tenths / 10) * 1000)}.${tenths % 10}`;
+}

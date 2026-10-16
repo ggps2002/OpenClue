@@ -34,6 +34,11 @@ On the same page, **AI voiceover** speaks each segment with a voice you pick (Op
 speeds up lines that run a little long so they fit their slot, and mixes everything into one track you can
 play in sync with the video. Only changed segments are re-voiced, and any single segment can be
 regenerated. Without an OpenAI key each segment gets silent audio of the right length instead.
+Choose **Edit video** on a project to open the editor: it starts from one project video (plus the voiceover
+on its own track), and lets you split scenes at the playhead, trim their start and end, reorder them (drag or
+buttons), mute a scene's own sound, add more project videos as scenes, and move or mute audio clips, with
+undo/redo and a live preview that plays the edit across scenes. Keyboard: Space plays/pauses, S splits,
+Ctrl+Z / Ctrl+Shift+Z undo and redo.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
