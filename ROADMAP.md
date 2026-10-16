@@ -8,7 +8,7 @@ Each scheduled run takes the first unchecked milestone, builds a working slice, 
 - [x] 2. **Projects and media.** Create, rename and delete projects. Upload video, images, PDF and slide files (multer → StorageService). A per-workspace media library. A project detail page.
 - [x] 3. **Browser screen recording.** Record screen + mic with getDisplayMedia + MediaRecorder from inside the app (a `ScreenRecorder` class), capture click positions and timestamps during recording (for auto-zoom later), and upload the result into a project.
 - [x] 4. **Transcription and AI script.** Transcribe a recording's audio. Claude rewrites the rough narration into a clean script split into timed segments, which the user can edit.
-- [ ] 5. **AI voiceover.** Generate TTS audio per script segment, with a voice picker, synced to segment timing, and the option to regenerate one segment.
+- [x] 5. **AI voiceover.** Generate TTS audio per script segment, with a voice picker, synced to segment timing, and the option to regenerate one segment.
 - [ ] 6. **Video editor.** A timeline with scenes, tracks and clips (a `Timeline` model class): trim, split, reorder; text, shape and image overlays with keyframed position, scale and opacity; transitions between scenes; automatic zoom/spotlight effects from recorded click data, which the user can edit; a live preview player.
 - [ ] 7. **Captions.** Auto-generate captions from the script/voiceover, with brand-styleable caption presets. Export SRT and VTT.
 - [ ] 8. **Export and rendering.** A server-side render of the timeline to MP4 with ffmpeg through an in-process job queue class with progress polling, plus GIF export. Track export minutes per user each month.
@@ -46,7 +46,20 @@ Stretch (only after 1–16): AI presenter avatars, an MCP server exposing projec
 - **2026-10-16 — Scripts are stored as one JSON array of `{ id, startMs, endMs, text }` per project/language** and saved wholesale on edit. Voiceover (milestone 5) keys audio by segment id.
 - **2026-10-16 — Speech-to-text goes over plain `fetch` + `FormData`** to the OpenAI REST API (no extra SDK dependency); model from `STT_MODEL`.
 
+- **2026-10-16 — Voiceover clips in their own table** (`Voiceover` per script, `VoiceoverClip` per segment id). Each clip stores the text, timing and voice it was made from, so "stale" is a plain comparison and "update changed" only re-voices what changed. A clip whose words and voice are unchanged and that still fits a moved slot is just retimed (no TTS call).
+- **2026-10-16 — Fitting speech to segments:** TTS longer than its slot is sped up with ffmpeg `atempo` up to 1.25×; anything still too long is kept and reported as `overflowMs` so the user shortens the text (speech is never cut). A mixed track (`adelay` + `amix`, covering the whole script) is rebuilt after every generation and is what the editor/export will use.
+- **2026-10-16 — Generated per-project files live under `projects/<projectId>/`** in storage; `ProjectService.delete` removes that prefix (`StorageService.removeDir`). Renders and exports should use the same prefix.
+
 ## Progress log
+
+### 2026-10-16 — Milestone 5 (AI voiceover) done
+- Prisma: `Voiceover` (one per script, chosen voice, mixed `trackKey` + duration) and `VoiceoverClip` (per segment: text/timing/voice it was made from, storage key, duration, tempo, source).
+- Server libs: `SpeechClient.synthesize` (OpenAI `/v1/audio/speech`, model `TTS_MODEL`) and the `VOICES` list; `FfmpegService.silence` / `changeTempo` / `mixAtOffsets`; `StorageService.removeDir`; `mapLimit` (`lib/concurrency.ts`, TTS runs 4 at a time). `ScriptService.load` for other modules.
+- `voiceovers` module: `GET /api/voices`, `GET/POST/DELETE /api/projects/:id/voiceover` (POST `{ voice, scope: 'changed' | 'all' }`), `POST .../voiceover/segments/:segmentId` (regenerate one), `GET .../voiceover/track` and `.../segments/:segmentId/audio` (MP3 streaming, viewer access). Per-segment status `ready | stale | missing | empty`; clips for deleted segments are pruned; partial TTS failures keep what worked and return 502. Offline mode makes silent clips of each segment's exact length.
+- Client: voiceover panel on the Script page (voice picker, "Generate voiceover" / "Update N changed" / "Re-voice with this voice" / "Re-voice all", "Hear the voiceover with the video" which mutes the video and keeps the track in sync via `syncTrack`), per-segment status badge, speed-up and overflow hints, play-clip and regenerate buttons. Generation is disabled while the script has unsaved edits.
+- Tests: 76 server (+ ffmpeg audio helpers, TTS request, VoiceoverService offline/online with a fake TTS subclass: fitting, retime, voice change, regenerate, prune, partial failure, project delete cleanup, routes + access), 44 client (+ `syncTrack`, voiceover flows). typecheck/lint/test/build green; production build smoke-tested (sign-up → WebM upload → offline script → offline voiceover → MP3 track streamed → files removed with the project).
+- Next: Milestone 6 — Video editor. Likely needs splitting: (a) `Timeline` model class (scenes/tracks/clips, trim/split/reorder) persisted per project, seeded from the source recording + voiceover track; (b) overlays with keyframes; (c) transitions; (d) auto-zoom from recording clicks; (e) live preview player.
+- Known issues: voiceover generation runs inside the request (fine for short scripts; move onto the milestone 8 job queue for long ones). Two concurrent generations of the same project can race (last write wins; files of the loser may be orphaned). Redrafting the script gives segments new ids, so the old voiceover shows as "not voiced" until regenerated.
 
 ### 2026-10-16 — Milestone 4 (Transcription and AI script) done
 - Prisma: `Transcript` (one per media asset, cascades) and `Script` (per project + language, `sourceMediaId` set null when the media is deleted); both store timed segments as JSON.

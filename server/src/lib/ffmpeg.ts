@@ -78,7 +78,37 @@ export class FfmpegService {
     await fs.promises.mkdir(path.dirname(output), { recursive: true });
     await this.exec(['-y', '-i', input, '-map', '0', '-c', 'copy', output]);
   }
+
+  /** Writes a silent speech MP3 of exactly `durationMs` (the offline stand-in for a voiceover clip). */
+  async silence(durationMs: number, output: string): Promise<void> {
+    await fs.promises.mkdir(path.dirname(output), { recursive: true });
+    await this.exec(['-y', '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono', '-t', seconds(durationMs), ...SPEECH_MP3, output]);
+  }
+
+  /** Re-encodes audio played `tempo` times faster without changing pitch (atempo accepts 0.5–100). */
+  async changeTempo(input: string, output: string, tempo: number): Promise<void> {
+    await fs.promises.mkdir(path.dirname(output), { recursive: true });
+    await this.exec(['-y', '-i', input, '-filter:a', `atempo=${tempo.toFixed(4)}`, ...SPEECH_MP3, output]);
+  }
+
+  /** Mixes clips onto one silent track of `durationMs`, each starting at its `startMs`. */
+  async mixAtOffsets(clips: { path: string; startMs: number }[], durationMs: number, output: string): Promise<void> {
+    await fs.promises.mkdir(path.dirname(output), { recursive: true });
+    const inputs = ['-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono', ...clips.flatMap((c) => ['-i', c.path])];
+    const delayed = clips.map((c, i) => `[${i + 1}:a]aresample=24000,adelay=${Math.max(0, Math.round(c.startMs))}:all=1[d${i}]`);
+    const labels = ['[0:a]', ...clips.map((_, i) => `[d${i}]`)].join('');
+    // The silent source keeps the track running through gaps; normalize=0 stops amix lowering each clip's volume.
+    const filter = [...delayed, `${labels}amix=inputs=${clips.length + 1}:duration=first:normalize=0[out]`].join(';');
+    await this.exec(['-y', ...inputs, '-filter_complex', filter, '-map', '[out]', '-t', seconds(durationMs), ...SPEECH_MP3, output]);
+  }
 }
+
+function seconds(ms: number): string {
+  return (Math.max(0, ms) / 1000).toFixed(3);
+}
+
+/** Voiceover audio format: speech-friendly mono MP3 at the sample rate OpenAI TTS returns. */
+const SPEECH_MP3 = ['-ac', '1', '-ar', '24000', '-c:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3'];
 
 /** Parses `Duration: 00:01:02.50` from ffmpeg's input summary; null for `N/A` or missing. */
 export function parseDurationMs(stderr: string): number | null {

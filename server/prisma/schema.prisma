@@ -129,7 +129,44 @@ model Script {
   updatedAt     DateTime    @updatedAt
   project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sourceMedia   MediaAsset? @relation(fields: [sourceMediaId], references: [id], onDelete: SetNull)
+  voiceover     Voiceover?
 
   @@unique([projectId, language])
   @@index([sourceMediaId])
+}
+
+// The spoken narration of a script. trackKey is the storage key of all clips mixed at their
+// segment start times (rebuilt after every generation). voice is the last voice picked.
+model Voiceover {
+  id              String          @id @default(cuid())
+  scriptId        String          @unique
+  voice           String
+  trackKey        String?
+  trackDurationMs Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  script          Script          @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  clips           VoiceoverClip[]
+}
+
+// TTS audio for one script segment. text/startMs/endMs/voice are what the clip was made from,
+// so the clip counts as stale once the segment changes. tempo > 1 means it was sped up to fit.
+// source: "openai" | "offline" (silence of the segment's length when no OpenAI key is set).
+model VoiceoverClip {
+  id          String    @id @default(cuid())
+  voiceoverId String
+  segmentId   String
+  text        String
+  startMs     Int
+  endMs       Int
+  voice       String
+  storageKey  String    @unique
+  durationMs  Int
+  tempo       Float
+  source      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  voiceover   Voiceover @relation(fields: [voiceoverId], references: [id], onDelete: Cascade)
+
+  @@unique([voiceoverId, segmentId])
 }

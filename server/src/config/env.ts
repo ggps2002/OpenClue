@@ -21,6 +21,7 @@ const schema = z.object({
   AI_MODEL: z.string().default('claude-sonnet-5-5'),
   OPENAI_API_KEY: z.string().optional(),
   STT_MODEL: z.string().default('whisper-1'),
+  TTS_MODEL: z.string().default('gpt-4o-mini-tts'),
 });
 
 function loadEnv() {

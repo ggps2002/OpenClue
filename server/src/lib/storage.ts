@@ -55,6 +55,11 @@ export class StorageService {
     await fs.promises.rm(this.resolve(key), { force: true });
   }
 
+  /** Deletes everything under a key prefix (e.g. a project's generated files); missing is not an error. */
+  async removeDir(prefix: string): Promise<void> {
+    await fs.promises.rm(this.resolve(prefix), { recursive: true, force: true });
+  }
+
   /** Absolute path for a key. Throws if the key would escape the storage root. */
   resolve(key: string): string {
     const root = path.resolve(this.root);

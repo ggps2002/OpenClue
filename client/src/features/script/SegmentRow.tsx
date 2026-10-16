@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Button } from '../../components/ui/Button';
 import { cn } from '../../lib/cn';
 import { formatDuration } from '../../lib/format';
@@ -19,6 +19,8 @@ interface SegmentRowProps {
   onMerge(): void;
   onRemove(): void;
   onInsertAfter(): void;
+  /** Extra per-segment content, e.g. voiceover controls. */
+  footer?: ReactNode;
 }
 
 const smallButton = 'px-2 py-1 text-xs';
@@ -110,6 +112,7 @@ export function SegmentRow(props: SegmentRowProps) {
           </Button>
         </div>
       )}
+      {props.footer}
     </li>
   );
 }

@@ -35,7 +35,7 @@ describe('detectMediaKind', () => {
 
 describe('MediaService', () => {
   const service = new MediaService(storage);
-  const projects = new ProjectService();
+  const projects = new ProjectService(storage);
   let owner: TestUser;
   let outsider: TestUser;
 

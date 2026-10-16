@@ -19,7 +19,7 @@ import { createApp, resetDatabase, signUpUser, type TestUser } from './helpers';
 const app = createApp();
 const storage = new StorageService();
 const media = new MediaService(storage);
-const projects = new ProjectService();
+const projects = new ProjectService(storage);
 const transcripts = new TranscriptService(media, storage, new FfmpegService(), new SpeechClient(undefined));
 afterAll(() => fs.rmSync(env.storageDir, { recursive: true, force: true }));
 

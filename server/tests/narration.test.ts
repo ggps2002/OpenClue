@@ -120,6 +120,22 @@ describe('SpeechClient', () => {
     const client = new SpeechClient('sk-test', 'whisper-1', fetchFn);
     await expect(client.transcribe(audio, 1000)).rejects.toThrow(/429/);
   });
+
+  it('synthesizes speech to an MP3 file', async () => {
+    const output = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openclue-tts-')), 'nested', 'clip.mp3');
+    const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => new Response(new Uint8Array([1, 2, 3])));
+    const client = new SpeechClient('sk-test', 'whisper-1', fetchFn as unknown as typeof fetch, 'tts-test');
+    await client.synthesize('Hello there.', 'nova', output);
+
+    expect(fs.readFileSync(output)).toEqual(Buffer.from([1, 2, 3]));
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('https://api.openai.com/v1/audio/speech');
+    expect(JSON.parse(String(init?.body))).toEqual({ model: 'tts-test', voice: 'nova', input: 'Hello there.', response_format: 'mp3' });
+
+    const failing = new SpeechClient('sk-test', 'whisper-1', async () => new Response('bad voice', { status: 400 }));
+    await expect(failing.synthesize('Hi.', 'nova', output)).rejects.toThrow(/400/);
+    await expect(new SpeechClient(undefined).synthesize('Hi.', 'nova', output)).rejects.toThrow(/OPENAI_API_KEY/);
+  });
 });
 
 describe('ClaudeClient', () => {

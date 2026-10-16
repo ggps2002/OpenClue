@@ -30,6 +30,10 @@ Open a project and choose **Script**: OpenClue transcribes a recording's narrati
 has Claude rewrite it into a clean script split into timed segments, and lets you edit, split, merge and
 re-time the segments next to a synced player. Without API keys a placeholder transcript and a built-in
 cleanup are used instead, so the flow still works end to end.
+On the same page, **AI voiceover** speaks each segment with a voice you pick (OpenAI text-to-speech),
+speeds up lines that run a little long so they fit their slot, and mixes everything into one track you can
+play in sync with the video. Only changed segments are re-voiced, and any single segment can be
+regenerated. Without an OpenAI key each segment gets silent audio of the right length instead.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
@@ -62,6 +66,7 @@ Set in `server/.env` (copied from `server/.env.example` on install). Never commi
 | `AI_MODEL`          | `claude-sonnet-5-5`  | Claude model id                                               |
 | `OPENAI_API_KEY`    | _(empty)_            | Enables speech-to-text and text-to-speech                     |
 | `STT_MODEL`         | `whisper-1`          | OpenAI speech-to-text model (must return segment timestamps)  |
+| `TTS_MODEL`         | `gpt-4o-mini-tts`    | OpenAI text-to-speech model used for voiceovers               |
 
 ## Project layout
 

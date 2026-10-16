@@ -4,6 +4,9 @@ import { Button } from '../../components/ui/Button';
 import { ApiError } from '../../lib/ApiClient';
 import { formatRelative } from '../../lib/format';
 import type { MediaAsset } from '../media/media.api';
+import { SegmentVoice } from '../voiceover/SegmentVoice';
+import { useVoiceover } from '../voiceover/useVoiceover';
+import { VoiceoverPanel } from '../voiceover/VoiceoverPanel';
 import { scriptApi, type Script, type ScriptSegment } from './script.api';
 import { SegmentRow } from './SegmentRow';
 import {
@@ -37,6 +40,8 @@ export function ScriptEditor({ script, source, canEdit, onSaved, onRegenerate }:
   const [error, setError] = useState<string>();
   const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const stopAtRef = useRef<number | null>(null);
+  const voiceover = useVoiceover(script.projectId);
+  const clips = new Map(voiceover.voiceover?.segments.map((c) => [c.segmentId, c]));
 
   const issues = useMemo(() => findIssues(segments), [segments]);
   const dirty = useMemo(() => JSON.stringify(segments) !== JSON.stringify(script.segments), [segments, script.segments]);
@@ -86,6 +91,23 @@ export function ScriptEditor({ script, source, canEdit, onSaved, onRegenerate }:
     onRegenerate();
   };
 
+  const renderVoice = (segmentId: string, index: number) => {
+    const clip = clips.get(segmentId);
+    if (!clip) return null;
+    const { busy } = voiceover;
+    return (
+      <SegmentVoice
+        clip={clip}
+        label={`segment ${index + 1}`}
+        canEdit={canEdit}
+        disabled={dirty || busy !== null}
+        regenerating={busy?.kind === 'segment' && busy.segmentId === segmentId}
+        onPlay={voiceover.playClip}
+        onRegenerate={() => void voiceover.regenerateSegment(segmentId)}
+      />
+    );
+  };
+
   const MediaTag = source?.kind === 'audio' ? 'audio' : 'video';
 
   return (
@@ -106,6 +128,7 @@ export function ScriptEditor({ script, source, canEdit, onSaved, onRegenerate }:
           <p className="rounded-xl bg-slate-100 p-6 text-sm text-slate-600">The recording this script was written from is no longer in the project.</p>
         )}
         {active && <p className="rounded-lg bg-indigo-50 p-3 text-sm text-indigo-900">{active.text || '…'}</p>}
+        <VoiceoverPanel state={voiceover} mediaRef={mediaRef} canEdit={canEdit} dirty={dirty} />
         {source && <TranscriptPanel mediaId={source.id} />}
       </div>
 
@@ -155,6 +178,7 @@ export function ScriptEditor({ script, source, canEdit, onSaved, onRegenerate }:
               onMerge={() => setSegments((list) => mergeWithNext(list, segment.id))}
               onRemove={() => setSegments((list) => removeSegment(list, segment.id))}
               onInsertAfter={() => setSegments((list) => insertAfter(list, segment.id, newId()))}
+              footer={renderVoice(segment.id, i)}
             />
           ))}
         </ol>

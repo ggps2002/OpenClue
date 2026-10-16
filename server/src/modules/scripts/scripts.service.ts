@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Script } from '@prisma/client';
 import { z } from 'zod';
+import type { Role } from '../../lib/access';
 import { AiError, type ClaudeClient } from '../../lib/claude';
 import { prisma } from '../../lib/prisma';
 import type { TimedText } from '../../lib/speech';
@@ -71,6 +72,14 @@ export class ScriptService {
     await this.projects.load(userId, projectId, 'viewer');
     const script = await this.findPrimary(projectId);
     return script ? toDto(script) : null;
+  }
+
+  /** The project's script for a user with at least `minRole`; 404 when there is none yet. */
+  async load(userId: string, projectId: string, minRole: Role): Promise<ScriptDto> {
+    await this.projects.load(userId, projectId, minRole);
+    const script = await this.findPrimary(projectId);
+    if (!script) throw new HttpError(404, 'This project has no script yet');
+    return toDto(script);
   }
 
   /** Transcribes the chosen project video (if needed) and replaces the script with a fresh draft. */

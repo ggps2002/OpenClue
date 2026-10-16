@@ -1,6 +1,7 @@
 import type { Project } from '@prisma/client';
 import { requireWorkspaceRole, type Role } from '../../lib/access';
 import { prisma } from '../../lib/prisma';
+import type { StorageService } from '../../lib/storage';
 import { HttpError } from '../../middleware/error';
 import { MediaService, mediaInclude, type MediaAssetDto } from '../media/media.service';
 
@@ -18,7 +19,12 @@ export interface ProjectDetail extends ProjectSummary {
   media: MediaAssetDto[];
 }
 
+/** Storage prefix for files generated for a project (voiceovers, later renders); removed with the project. */
+export const projectFilesPrefix = (projectId: string) => `projects/${projectId}`;
+
 export class ProjectService {
+  constructor(private readonly storage: StorageService) {}
+
   async list(userId: string, workspaceId: string): Promise<ProjectSummary[]> {
     await requireWorkspaceRole(userId, workspaceId, 'viewer');
     const projects = await prisma.project.findMany({
@@ -55,10 +61,11 @@ export class ProjectService {
     return this.toSummary(project, project._count.mediaAssets);
   }
 
-  /** Deletes the project; its media stays in the workspace library, unlinked. */
+  /** Deletes the project and its generated files; its media stays in the workspace library, unlinked. */
   async delete(userId: string, projectId: string): Promise<void> {
     await this.load(userId, projectId, 'editor');
     await prisma.project.delete({ where: { id: projectId } });
+    await this.storage.removeDir(projectFilesPrefix(projectId));
   }
 
   /** Loads a project the user can access with at least `minRole`; 404 otherwise. */

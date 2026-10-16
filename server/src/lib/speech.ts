@@ -36,15 +36,37 @@ const OFFLINE_LINES = [
   'And that is basically it, the update is live right away.',
 ];
 
+/** OpenAI text-to-speech voices, with our own short descriptions for the voice picker. */
+export const VOICES = [
+  { id: 'alloy', label: 'Alloy', description: 'Balanced and neutral' },
+  { id: 'ash', label: 'Ash', description: 'Clear and direct' },
+  { id: 'ballad', label: 'Ballad', description: 'Soft and melodic' },
+  { id: 'coral', label: 'Coral', description: 'Warm and friendly' },
+  { id: 'echo', label: 'Echo', description: 'Calm and even' },
+  { id: 'fable', label: 'Fable', description: 'Expressive storyteller' },
+  { id: 'nova', label: 'Nova', description: 'Bright and upbeat' },
+  { id: 'onyx', label: 'Onyx', description: 'Deep and steady' },
+  { id: 'sage', label: 'Sage', description: 'Thoughtful and measured' },
+  { id: 'shimmer', label: 'Shimmer', description: 'Light and lively' },
+] as const;
+
+export type VoiceId = (typeof VOICES)[number]['id'];
+export const VOICE_IDS = VOICES.map((v) => v.id) as [VoiceId, ...VoiceId[]];
+export const DEFAULT_VOICE: VoiceId = 'coral';
+
 const OFFLINE_SEGMENT_MS = 5000;
 const MAX_OFFLINE_SEGMENTS = 60;
 
-/** Speech-to-text through the OpenAI audio API, with deterministic offline output when no key is set. */
+/**
+ * Speech-to-text and text-to-speech through the OpenAI audio API. Without a key, `transcribe` returns a
+ * deterministic placeholder; `synthesize` needs a key, so callers check `isOnline` and make silence instead.
+ */
 export class SpeechClient {
   constructor(
     private readonly apiKey: string | undefined = env.openaiApiKey,
     private readonly model: string = env.STT_MODEL,
     private readonly fetchFn: typeof fetch = (...args) => fetch(...args),
+    private readonly ttsModel: string = env.TTS_MODEL,
   ) {}
 
   get isOnline(): boolean {
@@ -79,6 +101,21 @@ export class SpeechClient {
       segments.push({ startMs: 0, endMs: durationMs, text: data.text.trim() });
     }
     return { language: data.language ?? 'en', segments, source: 'openai' };
+  }
+
+  /** Speaks `text` with `voice` and writes the MP3 to `outputPath`. */
+  async synthesize(text: string, voice: VoiceId, outputPath: string): Promise<void> {
+    if (!this.apiKey) throw new Error('Text-to-speech needs OPENAI_API_KEY');
+    const res = await this.fetchFn('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: this.ttsModel, voice, input: text, response_format: 'mp3' }),
+    });
+    if (!res.ok) {
+      throw new Error(`OpenAI speech failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    }
+    await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.promises.writeFile(outputPath, Buffer.from(await res.arrayBuffer()));
   }
 }
 

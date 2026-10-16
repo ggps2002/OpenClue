@@ -17,7 +17,7 @@ const storage = new StorageService();
 const media = new MediaService(storage);
 const ffmpeg = new FfmpegService();
 const service = new RecordingService(media, storage, ffmpeg);
-const projects = new ProjectService();
+const projects = new ProjectService(storage);
 afterAll(() => fs.rmSync(env.storageDir, { recursive: true, force: true }));
 
 const metadata = {

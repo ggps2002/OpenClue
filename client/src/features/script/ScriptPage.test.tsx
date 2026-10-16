@@ -43,6 +43,12 @@ const script: Script = {
   updatedAt: now,
 };
 
+/** The script editor also loads the voiceover; these tests start without one. */
+const noVoiceover = {
+  'GET /voices': () => respond(200, { voices: [{ id: 'coral', label: 'Coral', description: 'Warm' }], defaultVoice: 'coral', mode: 'offline' }),
+  'GET /projects/p1/voiceover': () => respond(200, { voiceover: null }),
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -51,6 +57,7 @@ afterEach(() => {
 describe('ScriptPage', () => {
   it('writes a script from a project recording', async () => {
     const fetchMock = mockApi({
+      ...noVoiceover,
       'GET /projects/p1': () => respond(200, { project }),
       'GET /projects/p1/script': () => respond(200, { script: null }),
       'POST /projects/p1/script': () => respond(200, { script: { ...script, source: 'offline' } }),
@@ -69,6 +76,7 @@ describe('ScriptPage', () => {
 
   it('asks for a recording when the project has none', async () => {
     mockApi({
+      ...noVoiceover,
       'GET /projects/p1': () => respond(200, { project: { ...project, media: [], mediaCount: 0 } }),
       'GET /projects/p1/script': () => respond(200, { script: null }),
     });
@@ -79,6 +87,7 @@ describe('ScriptPage', () => {
 
   it('edits, splits and saves segments', async () => {
     const fetchMock = mockApi({
+      ...noVoiceover,
       'GET /projects/p1': () => respond(200, { project }),
       'GET /projects/p1/script': () => respond(200, { script }),
       'PUT /projects/p1/script': (init) => {
@@ -111,6 +120,7 @@ describe('ScriptPage', () => {
 
   it('blocks saving overlapping segments', async () => {
     mockApi({
+      ...noVoiceover,
       'GET /projects/p1': () => respond(200, { project }),
       'GET /projects/p1/script': () => respond(200, { script }),
     });
@@ -128,6 +138,7 @@ describe('ScriptPage', () => {
 
   it('is read-only for viewers', async () => {
     mockApi({
+      ...noVoiceover,
       'GET /projects/p1': () => respond(200, { project: { ...project, role: 'viewer' } }),
       'GET /projects/p1/script': () => respond(200, { script }),
     });

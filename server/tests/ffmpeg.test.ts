@@ -63,3 +63,32 @@ describe('FfmpegService', () => {
     expect(parseDurationMs(stderr)).toBeGreaterThanOrEqual(1800);
   });
 });
+
+describe('FfmpegService voiceover audio', () => {
+  it('makes silence of an exact length', async () => {
+    const out = path.join(dir, 'silence.mp3');
+    await ffmpeg.silence(1500, out);
+    expect(await ffmpeg.hasAudio(out)).toBe(true);
+    expect(Math.abs((await ffmpeg.probeDurationMs(out))! - 1500)).toBeLessThan(80);
+  });
+
+  it('speeds audio up without changing its content length beyond the tempo', async () => {
+    const tone = path.join(dir, 'tone.mp3');
+    await ffmpeg.exec(['-y', '-f', 'lavfi', '-i', 'sine=duration=2', tone]);
+    const fast = path.join(dir, 'fast.mp3');
+    await ffmpeg.changeTempo(tone, fast, 1.25);
+    expect(Math.abs((await ffmpeg.probeDurationMs(fast))! - 1600)).toBeLessThan(100);
+  });
+
+  it('mixes clips at offsets onto a track of the requested length', async () => {
+    const a = path.join(dir, 'a.mp3');
+    await ffmpeg.exec(['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.5', a]);
+    const track = path.join(dir, 'track.mp3');
+    await ffmpeg.mixAtOffsets([{ path: a, startMs: 0 }, { path: a, startMs: 2000 }], 3000, track);
+    expect(Math.abs((await ffmpeg.probeDurationMs(track))! - 3000)).toBeLessThan(100);
+
+    const empty = path.join(dir, 'empty.mp3');
+    await ffmpeg.mixAtOffsets([], 1000, empty);
+    expect(Math.abs((await ffmpeg.probeDurationMs(empty))! - 1000)).toBeLessThan(80);
+  });
+});

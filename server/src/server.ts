@@ -21,6 +21,8 @@ import { ScriptController } from './modules/scripts/scripts.controller';
 import { ScriptService } from './modules/scripts/scripts.service';
 import { TranscriptController } from './modules/transcripts/transcripts.controller';
 import { TranscriptService } from './modules/transcripts/transcripts.service';
+import { VoiceoverController } from './modules/voiceovers/voiceovers.controller';
+import { VoiceoverService } from './modules/voiceovers/voiceovers.service';
 
 /** The OpenClue HTTP server: middleware, module routers, errors, static client, listen. */
 export class Server {
@@ -52,7 +54,7 @@ export class Server {
 
   private mountModules(): void {
     this.app.use('/api/auth', new AuthController(new AuthService()).router);
-    const projects = new ProjectService();
+    const projects = new ProjectService(this.storage);
     this.app.use('/api', new ProjectController(projects).router);
     const media = new MediaService(this.storage);
     this.app.use('/api', new MediaController(media, this.storage).router);
@@ -60,7 +62,10 @@ export class Server {
     this.app.use('/api', new RecordingController(recordings, this.storage).router);
     const transcripts = new TranscriptService(media, this.storage, this.ffmpeg, this.speech);
     this.app.use('/api', new TranscriptController(transcripts).router);
-    this.app.use('/api', new ScriptController(new ScriptService(projects, media, transcripts, this.claude)).router);
+    const scripts = new ScriptService(projects, media, transcripts, this.claude);
+    this.app.use('/api', new ScriptController(scripts).router);
+    const voiceovers = new VoiceoverService(scripts, this.storage, this.ffmpeg, this.speech);
+    this.app.use('/api', new VoiceoverController(voiceovers).router);
   }
 
   private serveClient(): void {
