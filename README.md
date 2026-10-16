@@ -26,6 +26,11 @@ Use **Record** (sidebar, dashboard or a project page) to capture your screen and
 the browser; clicks inside the OpenClue tab are saved with the recording for automatic zooms later.
 Screen recording needs a desktop browser with `getDisplayMedia` (recent Chrome, Edge or Firefox) and a
 secure context (`localhost` or HTTPS).
+Open a project and choose **Script**: OpenClue transcribes a recording's narration (OpenAI speech-to-text),
+has Claude rewrite it into a clean script split into timed segments, and lets you edit, split, merge and
+re-time the segments next to a synced player. Without API keys a placeholder transcript and a built-in
+cleanup are used instead, so the flow still works end to end.
+Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
 ## Scripts (run from the repo root)
@@ -56,6 +61,7 @@ Set in `server/.env` (copied from `server/.env.example` on install). Never commi
 | `ANTHROPIC_API_KEY` | _(empty)_            | Enables Claude for scripts, docs, translation and planning    |
 | `AI_MODEL`          | `claude-sonnet-5-5`  | Claude model id                                               |
 | `OPENAI_API_KEY`    | _(empty)_            | Enables speech-to-text and text-to-speech                     |
+| `STT_MODEL`         | `whisper-1`          | OpenAI speech-to-text model (must return segment timestamps)  |
 
 ## Project layout
 
@@ -68,7 +74,7 @@ client/              React 18 + Vite + Tailwind web app
 server/              Express 5 API
   src/server.ts      the single entry point (Server class)
   src/config/        typed env loading
-  src/lib/           Prisma client and shared service classes
+  src/lib/           Prisma client, FfmpegService, StorageService, AI clients (Claude, speech)
   src/middleware/    auth, errors, uploads
   src/modules/       one folder per feature: controller + service (+ zod schema)
   prisma/            schema.prisma and the SQLite database

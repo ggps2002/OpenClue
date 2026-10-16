@@ -7,7 +7,7 @@ Each scheduled run takes the first unchecked milestone, builds a working slice, 
 - [x] 1. **Foundation.** Workspaces, client and server skeletons, `server.ts`, Prisma + SQLite, all root scripts working, README. Email/password auth (bcrypt, JWT in an httpOnly cookie) with sign-up, sign-in and sign-out. A public landing page with original copy describing the product. A signed-in app shell with sidebar navigation and an empty dashboard.
 - [x] 2. **Projects and media.** Create, rename and delete projects. Upload video, images, PDF and slide files (multer → StorageService). A per-workspace media library. A project detail page.
 - [x] 3. **Browser screen recording.** Record screen + mic with getDisplayMedia + MediaRecorder from inside the app (a `ScreenRecorder` class), capture click positions and timestamps during recording (for auto-zoom later), and upload the result into a project.
-- [ ] 4. **Transcription and AI script.** Transcribe a recording's audio. Claude rewrites the rough narration into a clean script split into timed segments, which the user can edit.
+- [x] 4. **Transcription and AI script.** Transcribe a recording's audio. Claude rewrites the rough narration into a clean script split into timed segments, which the user can edit.
 - [ ] 5. **AI voiceover.** Generate TTS audio per script segment, with a voice picker, synced to segment timing, and the option to regenerate one segment.
 - [ ] 6. **Video editor.** A timeline with scenes, tracks and clips (a `Timeline` model class): trim, split, reorder; text, shape and image overlays with keyframed position, scale and opacity; transitions between scenes; automatic zoom/spotlight effects from recorded click data, which the user can edit; a live preview player.
 - [ ] 7. **Captions.** Auto-generate captions from the script/voiceover, with brand-styleable caption presets. Export SRT and VTT.
@@ -41,7 +41,22 @@ Stretch (only after 1–16): AI presenter avatars, an MCP server exposing projec
 - **2026-10-15 — `ScreenRecorder` takes a `RecorderEnvironment`** (mediaDevices, MediaRecorder, click target, clock) defaulting to browser globals, so tests run with fakes (`features/recorder/test-fakes.ts`) without a DI layer.
 - **2026-10-15 — Media files are served through the API** (`/api/media/:id/file`, cookie auth), never as static files, so access checks always apply.
 
+- **2026-10-16 — AI clients live in `server/src/lib/`** as concrete classes (`ClaudeClient`, `SpeechClient`) with an `isOnline` flag; services decide their own offline placeholder. Tests swap behaviour by subclassing (`FakeClaude extends ClaudeClient`) or injecting `fetch`, not via interfaces.
+- **2026-10-16 — Claude JSON via structured outputs** (`output_config.format` json_schema), not forced tool use (forced `tool_choice` is rejected by current models). Responses are re-validated with zod.
+- **2026-10-16 — Scripts are stored as one JSON array of `{ id, startMs, endMs, text }` per project/language** and saved wholesale on edit. Voiceover (milestone 5) keys audio by segment id.
+- **2026-10-16 — Speech-to-text goes over plain `fetch` + `FormData`** to the OpenAI REST API (no extra SDK dependency); model from `STT_MODEL`.
+
 ## Progress log
+
+### 2026-10-16 — Milestone 4 (Transcription and AI script) done
+- Prisma: `Transcript` (one per media asset, cascades) and `Script` (per project + language, `sourceMediaId` set null when the media is deleted); both store timed segments as JSON.
+- Server libs: `FfmpegService` (`lib/ffmpeg.ts`, the only ffmpeg spawner: run/exec, duration probe that decodes header-less WebM, audio-stream check, mono 16 kHz MP3 extraction, copy-remux), `SpeechClient` (`lib/speech.ts`, OpenAI `/v1/audio/transcriptions` with `verbose_json` segments; deterministic placeholder transcript offline), `ClaudeClient` (`lib/claude.ts`, `@anthropic-ai/sdk` structured outputs via `output_config.format` + zod validation; callers fall back offline).
+- Recordings are now remuxed (`-c copy`) after upload so MediaRecorder WebM files get a duration/seek index (best effort; original kept on failure). Fixes the known issue from milestone 3.
+- Modules: `transcripts` (`GET/POST /api/media/:id/transcript`), `scripts` (`GET/POST/PUT /api/projects/:id/script`; POST `{ mediaId, retranscribe? }` transcribes if needed and writes a draft; PUT saves edited segments, validated: ordered, non-overlapping, unique ids). Claude output is normalised (sorted, clamped to the video length, overlaps trimmed); offline drafts use `cleanNarration`/`draftOffline` (filler/stutter removal, merging short lines). AI failures map to 502 and keep the previous script.
+- Client: Script page (`/app/projects/:id/script`, "Script" button on project pages): source picker + generate, segment editor (text, start/end, split, merge, add, delete, words-vs-slot pace hint, validation that blocks saving), synced player (play a segment, live highlight), "New draft" with optional re-transcription, original transcript panel, offline-mode notice, read-only for viewers. `ApiClient.put`.
+- Tests: 63 server (FfmpegService with real lavfi media, SpeechClient with mocked fetch, narration helpers, ScriptService online/offline via a fake Claude subclass, routes + access), 37 client (segment helpers, Script page flows). typecheck/lint/test/build green; production build smoke-tested (sign-up → real WebM recording → remux → offline script).
+- Next: Milestone 5 — AI voiceover. Add TTS to `SpeechClient` (OpenAI `/v1/audio/speech`, voice list), offline silent audio of the segment length via `FfmpegService`, per-segment audio stored via `StorageService` keyed by script segment id, voice picker and per-segment regenerate on the Script page.
+- Known issues: transcription and script writing run inside the request (fine for short recordings; long files should move onto the job queue planned in milestone 8). OpenAI's transcription upload limit is 25 MB (~100 min of the 32 kbps MP3 we send); longer audio would need chunking. Segment ids are client-generated UUIDs for new segments; voiceover must handle edits that change timing.
 
 ### 2026-10-15 — Milestone 3 (Browser screen recording) done
 - Prisma: `Recording` (one-to-one with `MediaAsset`, cascades on delete): duration, size, shared surface, audio flag, `clickCount` and `clicks` JSON (`{ t, x, y }`).

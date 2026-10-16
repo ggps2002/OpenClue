@@ -82,22 +82,27 @@ export function ProjectDetailPage() {
       </Link>
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <ProjectTitle name={current.name} canEdit={canEdit} onRename={handleRename} />
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Link to={`/app/record?projectId=${current.id}`} className={buttonClasses('secondary')}>
-              Record screen
-            </Link>
-            <UploadButton
-              workspaceId={current.workspaceId}
-              projectId={current.id}
-              onUploaded={addMedia}
-              onError={setError}
-            />
-            <Button variant="secondary" onClick={() => void handleDelete()}>
-              Delete project
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to={`/app/projects/${current.id}/script`} className={buttonClasses('primary')}>
+            Script
+          </Link>
+          {canEdit && (
+            <>
+              <Link to={`/app/record?projectId=${current.id}`} className={buttonClasses('secondary')}>
+                Record screen
+              </Link>
+              <UploadButton
+                workspaceId={current.workspaceId}
+                projectId={current.id}
+                onUploaded={addMedia}
+                onError={setError}
+              />
+              <Button variant="secondary" onClick={() => void handleDelete()}>
+                Delete project
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && (

@@ -61,7 +61,8 @@ export class ProjectService {
     await prisma.project.delete({ where: { id: projectId } });
   }
 
-  private async load(userId: string, projectId: string, minRole: Role): Promise<{ project: Project; role: Role }> {
+  /** Loads a project the user can access with at least `minRole`; 404 otherwise. */
+  async load(userId: string, projectId: string, minRole: Role): Promise<{ project: Project; role: Role }> {
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new HttpError(404, 'Project not found');
     try {

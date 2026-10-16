@@ -3,7 +3,10 @@ import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import express, { type Express } from 'express';
 import { env } from './config/env';
+import { ClaudeClient } from './lib/claude';
+import { FfmpegService } from './lib/ffmpeg';
 import { prisma } from './lib/prisma';
+import { SpeechClient } from './lib/speech';
 import { StorageService } from './lib/storage';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { AuthController } from './modules/auth/auth.controller';
@@ -14,18 +17,31 @@ import { ProjectController } from './modules/projects/projects.controller';
 import { ProjectService } from './modules/projects/projects.service';
 import { RecordingController } from './modules/recordings/recordings.controller';
 import { RecordingService } from './modules/recordings/recordings.service';
+import { ScriptController } from './modules/scripts/scripts.controller';
+import { ScriptService } from './modules/scripts/scripts.service';
+import { TranscriptController } from './modules/transcripts/transcripts.controller';
+import { TranscriptService } from './modules/transcripts/transcripts.service';
 
 /** The OpenClue HTTP server: middleware, module routers, errors, static client, listen. */
 export class Server {
   readonly app: Express = express();
 
-  constructor(private readonly storage = new StorageService()) {
+  constructor(
+    private readonly storage = new StorageService(),
+    private readonly ffmpeg = new FfmpegService(),
+    private readonly claude = new ClaudeClient(),
+    private readonly speech = new SpeechClient(),
+  ) {
     this.app.disable('x-powered-by');
     this.app.use(express.json({ limit: '1mb' }));
     this.app.use(cookieParser());
 
     this.app.get('/api/health', (_req, res) => {
-      res.json({ status: 'ok', aiMode: env.anthropicApiKey ? 'online' : 'offline' });
+      res.json({
+        status: 'ok',
+        aiMode: this.claude.isOnline ? 'online' : 'offline',
+        speechMode: this.speech.isOnline ? 'online' : 'offline',
+      });
     });
     this.mountModules();
     this.app.use('/api', notFoundHandler);
@@ -36,10 +52,15 @@ export class Server {
 
   private mountModules(): void {
     this.app.use('/api/auth', new AuthController(new AuthService()).router);
-    this.app.use('/api', new ProjectController(new ProjectService()).router);
+    const projects = new ProjectService();
+    this.app.use('/api', new ProjectController(projects).router);
     const media = new MediaService(this.storage);
     this.app.use('/api', new MediaController(media, this.storage).router);
-    this.app.use('/api', new RecordingController(new RecordingService(media), this.storage).router);
+    const recordings = new RecordingService(media, this.storage, this.ffmpeg);
+    this.app.use('/api', new RecordingController(recordings, this.storage).router);
+    const transcripts = new TranscriptService(media, this.storage, this.ffmpeg, this.speech);
+    this.app.use('/api', new TranscriptController(transcripts).router);
+    this.app.use('/api', new ScriptController(new ScriptService(projects, media, transcripts, this.claude)).router);
   }
 
   private serveClient(): void {
@@ -56,7 +77,8 @@ export class Server {
   listen(port: number = env.PORT): void {
     const httpServer = this.app.listen(port, () => {
       console.log(`[server] OpenClue listening on http://localhost:${port} (${env.NODE_ENV})`);
-      if (!env.anthropicApiKey) console.log('[server] ANTHROPIC_API_KEY not set: AI features run in offline mode');
+      if (!this.claude.isOnline) console.log('[server] ANTHROPIC_API_KEY not set: AI writing runs in offline mode');
+      if (!this.speech.isOnline) console.log('[server] OPENAI_API_KEY not set: speech features run in offline mode');
     });
     const shutdown = () => {
       httpServer.close(() => void prisma.$disconnect().then(() => process.exit(0)));

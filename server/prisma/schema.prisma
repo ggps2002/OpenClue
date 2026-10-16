@@ -55,6 +55,7 @@ model Project {
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
   mediaAssets MediaAsset[]
+  scripts     Script[]
 
   @@index([workspaceId])
 }
@@ -63,20 +64,22 @@ model Project {
 // and is cleared (not cascaded) when the project is deleted.
 // kind: "video" | "image" | "audio" | "pdf" | "slides"
 model MediaAsset {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   kind         String
   originalName String
   mimeType     String
   sizeBytes    Int
-  storageKey   String    @unique
+  storageKey   String      @unique
   workspaceId  String
   projectId    String?
   uploadedById String
-  createdAt    DateTime  @default(now())
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  uploadedBy   User      @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy   User        @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
   recording    Recording?
+  transcript   Transcript?
+  scripts      Script[]
 
   @@index([workspaceId])
   @@index([projectId])
@@ -97,4 +100,36 @@ model Recording {
   clicks       Json
   createdAt    DateTime   @default(now())
   mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+}
+
+// Speech-to-text of a video or audio asset. segments is a JSON array of { startMs, endMs, text }.
+// source: "openai" | "offline" (placeholder output when no OpenAI key is configured).
+model Transcript {
+  id           String     @id @default(cuid())
+  mediaAssetId String     @unique
+  language     String
+  source       String
+  segments     Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+}
+
+// The narration script of a project's video: JSON array of { id, startMs, endMs, text }.
+// One script per project and language (translations arrive in milestone 10).
+// source: "claude" | "offline" (how the first draft was written; user edits keep it).
+model Script {
+  id            String      @id @default(cuid())
+  projectId     String
+  language      String      @default("en")
+  sourceMediaId String?
+  source        String
+  segments      Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceMedia   MediaAsset? @relation(fields: [sourceMediaId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, language])
+  @@index([sourceMediaId])
 }

@@ -20,6 +20,7 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-sonnet-5-5'),
   OPENAI_API_KEY: z.string().optional(),
+  STT_MODEL: z.string().default('whisper-1'),
 });
 
 function loadEnv() {
