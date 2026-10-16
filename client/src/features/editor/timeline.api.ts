@@ -5,7 +5,7 @@ import type { TimelineDoc } from './Timeline';
 export interface TimelineSource {
   id: string;
   name: string;
-  kind: 'video' | 'audio';
+  kind: 'video' | 'audio' | 'image';
   url: string;
   durationMs: number | null;
 }

@@ -1,10 +1,15 @@
 import { useState, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 import { formatDuration, formatTimecode } from '../../lib/format';
-import { clipLength, type Timeline } from './Timeline';
+import { overlayLabel, type OverlayTrack } from './overlays';
+import { clipLength, type AudioTrack, type Timeline } from './Timeline';
 import type { TimelineSource } from './timeline.api';
 
-export type Selection = { kind: 'scene'; id: string } | { kind: 'clip'; trackId: string; clipId: string } | null;
+export type Selection =
+  | { kind: 'scene'; id: string }
+  | { kind: 'clip'; trackId: string; clipId: string }
+  | { kind: 'overlay'; clipId: string }
+  | null;
 
 interface TimelineStripProps {
   timeline: Timeline;
@@ -103,9 +108,13 @@ export function TimelineStrip(props: TimelineStripProps) {
           {playhead}
         </div>
 
-        {timeline.tracks.map((track) => (
-          <TrackRow key={track.id} {...{ track, total, selection, onSelect, seekFromLane, playhead }} />
-        ))}
+        {timeline.tracks.map((track) =>
+          track.kind === 'audio' ? (
+            <TrackRow key={track.id} {...{ track, total, selection, onSelect, seekFromLane, playhead }} />
+          ) : (
+            <OverlayRow key={track.id} {...{ track, total, selection, onSelect, seekFromLane, playhead }} />
+          ),
+        )}
       </div>
       {canEdit && timeline.scenes.length > 1 && (
         <p className="mt-3 text-xs text-slate-500">Drag a scene onto another to reorder.</p>
@@ -114,8 +123,8 @@ export function TimelineStrip(props: TimelineStripProps) {
   );
 }
 
-interface TrackRowProps {
-  track: Timeline['tracks'][number];
+interface TrackRowProps<T> {
+  track: T;
   total: number;
   selection: Selection;
   onSelect(selection: Selection): void;
@@ -123,7 +132,7 @@ interface TrackRowProps {
   playhead: ReactNode;
 }
 
-function TrackRow({ track, total, selection, onSelect, seekFromLane, playhead }: TrackRowProps) {
+function TrackRow({ track, total, selection, onSelect, seekFromLane, playhead }: TrackRowProps<AudioTrack>) {
   return (
     <>
       <div className="self-center truncate text-xs font-semibold text-slate-700">
@@ -152,6 +161,52 @@ function TrackRow({ track, total, selection, onSelect, seekFromLane, playhead }:
               style={{ left: pct(clip.startMs, total), width: pct(clipLength(clip), total) }}
             >
               <span className="block truncate">{clip.source.type === 'voiceover' ? 'Voiceover' : 'Audio'}</span>
+            </button>
+          );
+        })}
+        {playhead}
+      </div>
+    </>
+  );
+}
+
+function OverlayRow({ track, total, selection, onSelect, seekFromLane, playhead }: TrackRowProps<OverlayTrack>) {
+  return (
+    <>
+      <div className="self-center truncate text-xs font-semibold text-slate-700">
+        {track.name}
+        {track.hidden && <span className="ml-1 font-normal text-slate-400">(hidden)</span>}
+      </div>
+      <div data-lane className="relative h-9 rounded-lg bg-slate-100" onClick={seekFromLane}>
+        {track.clips.map((clip) => {
+          const selected = selection?.kind === 'overlay' && selection.clipId === clip.id;
+          return (
+            <button
+              key={clip.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                seekFromLane(e);
+                onSelect({ kind: 'overlay', clipId: clip.id });
+              }}
+              aria-pressed={selected}
+              aria-label={`${overlayLabel(clip)} overlay at ${formatTimecode(clip.startMs)}`}
+              className={cn(
+                'absolute inset-y-1 overflow-hidden rounded-md border border-amber-300 bg-amber-100 px-2 text-left text-[10px] text-amber-900',
+                track.hidden && 'opacity-50',
+                selected && 'ring-2 ring-amber-600',
+              )}
+              style={{ left: pct(clip.startMs, total), width: pct(clip.durationMs, total) }}
+            >
+              <span className="block truncate">{overlayLabel(clip)}</span>
+              {clip.keyframes.map((k) => (
+                <span
+                  key={k.t}
+                  aria-hidden
+                  className="absolute bottom-0.5 h-1.5 w-1.5 -translate-x-1/2 rotate-45 bg-amber-600"
+                  style={{ left: pct(k.t, clip.durationMs) }}
+                />
+              ))}
             </button>
           );
         })}

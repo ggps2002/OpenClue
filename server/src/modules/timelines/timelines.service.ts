@@ -18,8 +18,9 @@ const PROBE_CONCURRENCY = 2;
 export interface TimelineSourceDto {
   id: string;
   name: string;
-  kind: 'video' | 'audio';
+  kind: 'video' | 'audio' | 'image';
   url: string;
+  /** Always null for images. */
   durationMs: number | null;
 }
 
@@ -39,7 +40,7 @@ interface Context {
   voiceover: TimelineDto['voiceover'];
 }
 
-/** Stores and validates the per-project edit (scenes cut from project videos plus audio tracks). */
+/** Stores and validates the per-project edit (scenes cut from project videos, audio tracks and overlays). */
 export class TimelineService {
   constructor(
     private readonly projects: ProjectService,
@@ -100,7 +101,15 @@ export class TimelineService {
       assertWithin(source.durationMs, scene.outMs, `${label} ends after its video does`);
     });
     for (const track of doc.tracks) {
-      track.clips.forEach((clip) => this.checkClip(clip, track.name, sources, context.voiceover));
+      if (track.kind === 'audio') {
+        track.clips.forEach((clip) => this.checkClip(clip, track.name, sources, context.voiceover));
+        continue;
+      }
+      for (const clip of track.clips) {
+        if (clip.content.type === 'image' && sources.get(clip.content.mediaId)?.kind !== 'image') {
+          throw new HttpError(400, `An image on ${track.name} is no longer in this project. Remove the overlay to save.`);
+        }
+      }
     }
     return toDto(projectId, context, await this.store(projectId, doc));
   }
@@ -112,7 +121,7 @@ export class TimelineService {
       return;
     }
     const source = sources.get(clip.source.mediaId);
-    if (!source) throw new HttpError(400, `A clip on ${trackName} uses a file that is no longer in this project`);
+    if (!source || source.kind === 'image') throw new HttpError(400, `A clip on ${trackName} uses a file that is no longer in this project`);
     assertWithin(source.durationMs, clip.outMs, `A clip on ${trackName} runs past the end of its file`);
   }
 
@@ -131,14 +140,14 @@ export class TimelineService {
     };
   }
 
-  /** The project's videos and audio files, oldest first, probing (and remembering) unknown durations. */
+  /** The project's videos, audio files and images, oldest first, probing (and remembering) unknown durations. */
   private async sources(projectId: string): Promise<TimelineSourceDto[]> {
     const assets = await prisma.mediaAsset.findMany({
-      where: { projectId, kind: { in: ['video', 'audio'] } },
+      where: { projectId, kind: { in: ['video', 'audio', 'image'] } },
       orderBy: { createdAt: 'asc' },
       include: { recording: { select: { durationMs: true } } },
     });
-    const unknown = assets.filter((a) => a.durationMs === null);
+    const unknown = assets.filter((a) => a.durationMs === null && a.kind !== 'image');
     await mapLimit(unknown, PROBE_CONCURRENCY, async (asset) => {
       const durationMs = asset.recording?.durationMs ?? (await this.ffmpeg.probeDurationMs(this.storage.resolve(asset.storageKey)));
       if (durationMs === null) return;

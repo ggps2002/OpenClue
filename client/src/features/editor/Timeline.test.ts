@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createOverlay } from './overlays';
 import { Timeline, type TimelineDoc } from './Timeline';
 
 function make(doc: Partial<TimelineDoc> = {}) {
@@ -83,9 +84,47 @@ describe('Timeline', () => {
 
   it('edits audio tracks', () => {
     const timeline = make();
-    expect(timeline.setTrackMuted('t1', true).tracks[0].muted).toBe(true);
+    expect(timeline.setTrackMuted('t1', true).audioTracks[0].muted).toBe(true);
     expect(timeline.removeClip('t1', 'c1').tracks[0].clips).toEqual([]);
     expect(timeline.setTrackMuted('nope', true)).toBe(timeline);
     expect(timeline.toJSON()).toBe(timeline.doc);
+  });
+
+  it('adds overlays on the top free overlay track and finds them by time', () => {
+    const text = createOverlay('o1', 'text', 1000);
+    const one = make().addOverlay(text);
+    expect(one.overlayTracks).toEqual([{ id: 'new-1', kind: 'overlay', name: 'Overlay 1', hidden: false, clips: [text] }]);
+    expect(one.tracks).toHaveLength(2);
+
+    // Overlapping overlay goes on a new track on top; a later one fits back on the top track.
+    const two = one.addOverlay(createOverlay('o2', 'shape', 2000));
+    expect(two.overlayTracks.map((t) => t.clips.map((c) => c.id))).toEqual([['o1'], ['o2']]);
+    const three = two.addOverlay(createOverlay('o3', 'shape', 6000));
+    expect(three.overlayTracks.map((t) => t.clips.map((c) => c.id))).toEqual([['o1'], ['o2', 'o3']]);
+
+    expect(three.overlaysAt(2500).map((o) => [o.clip.id, o.localMs])).toEqual([
+      ['o1', 1500],
+      ['o2', 500],
+    ]);
+    expect(three.overlaysAt(4000).map((o) => o.clip.id)).toEqual(['o2']);
+    expect(three.overlay('o3')?.track.id).toBe('new-2');
+    // Overlays running past the video extend the edit.
+    expect(three.durationMs).toBe(9000);
+    expect(make().addOverlay(createOverlay('o9', 'text', 9000)).durationMs).toBe(12000);
+  });
+
+  it('edits, moves, hides and removes overlays', () => {
+    const timeline = make().addOverlay(createOverlay('o1', 'text', 0)).addOverlay(createOverlay('o2', 'text', 500));
+    const trackId = timeline.overlayTracks[0].id;
+    expect(timeline.updateOverlay('o1', (c) => ({ ...c, width: 0.9 })).overlay('o1')?.clip.width).toBe(0.9);
+    expect(timeline.updateOverlay('nope', (c) => c)).toBe(timeline);
+    expect(timeline.moveClip(trackId, 'o1', -50).overlay('o1')?.clip.startMs).toBe(0);
+    expect(timeline.moveClip(trackId, 'o1', 1234.4).overlay('o1')?.clip.startMs).toBe(1234);
+    expect(timeline.setTrackHidden(trackId, true).overlayTracks[0].hidden).toBe(true);
+    // setTrackMuted / setTrackHidden only apply to their own track kind.
+    expect(timeline.setTrackMuted(trackId, true).overlayTracks[0]).not.toHaveProperty('muted');
+    // Removing the last overlay of a track removes the track.
+    const removed = timeline.removeClip(trackId, 'o1');
+    expect(removed.overlayTracks.map((t) => t.clips.map((c) => c.id))).toEqual([['o2']]);
   });
 });

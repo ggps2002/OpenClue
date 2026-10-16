@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatTimecode } from '../../lib/format';
 import type { PlayerState } from './TimelinePlayer';
@@ -9,12 +9,14 @@ interface PreviewPlayerProps {
   durationMs: number;
   onToggle(): void;
   onSeek(timeMs: number): void;
+  /** Drawn over the video, inside the 16:9 frame. */
+  children?: ReactNode;
 }
 
-/** The live preview: a video element driven by the TimelinePlayer, with play/pause and a scrubber. */
-export function PreviewPlayer({ videoRef, state, durationMs, onToggle, onSeek }: PreviewPlayerProps) {
+/** The live preview: a video element driven by the TimelinePlayer (plus any overlays), with play/pause and a scrubber. */
+export function PreviewPlayer({ videoRef, state, durationMs, onToggle, onSeek, children }: PreviewPlayerProps) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-slate-900">
+    <div className="self-start overflow-hidden rounded-2xl bg-slate-900">
       <div className="relative aspect-video">
         <video ref={videoRef} className="h-full w-full object-contain" playsInline preload="auto" aria-label="Preview" />
         {state.sceneId === null && (
@@ -22,6 +24,7 @@ export function PreviewPlayer({ videoRef, state, durationMs, onToggle, onSeek }:
             {durationMs === 0 ? 'Add a scene to see a preview' : 'End of video'}
           </div>
         )}
+        {children}
       </div>
       <div className="flex items-center gap-3 bg-slate-800 px-4 py-2">
         <Button

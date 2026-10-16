@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatTimecode } from '../../lib/format';
 import { NameField, SecondsField } from './fields';
+import { OverlayInspector } from './OverlayInspector';
+import { createOverlay, type OverlayKind } from './overlays';
 import { clipLength, type Timeline } from './Timeline';
 import type { TimelineSource } from './timeline.api';
 import type { Selection } from './TimelineStrip';
@@ -14,14 +16,16 @@ interface InspectorProps {
   canEdit: boolean;
   apply(edit: (timeline: Timeline) => Timeline): void;
   onSelect(selection: Selection): void;
+  onSeek(timeMs: number): void;
 }
 
-/** Side panel for the selected scene or audio clip; offers "add scene" when nothing is selected. */
+/** Side panel for the selected scene, audio clip or overlay; offers "add scene/overlay" when nothing is selected. */
 export function Inspector(props: InspectorProps) {
   const { timeline, selection } = props;
   const scene = selection?.kind === 'scene' ? timeline.placement(selection.id) : undefined;
-  const track = selection?.kind === 'clip' ? timeline.tracks.find((t) => t.id === selection.trackId) : undefined;
+  const track = selection?.kind === 'clip' ? timeline.audioTracks.find((t) => t.id === selection.trackId) : undefined;
   const clip = selection?.kind === 'clip' ? track?.clips.find((c) => c.id === selection.clipId) : undefined;
+  const overlay = selection?.kind === 'overlay' ? timeline.overlay(selection.clipId) : undefined;
 
   return (
     <aside className="rounded-2xl border border-slate-200 bg-white p-4" aria-label="Inspector">
@@ -29,6 +33,8 @@ export function Inspector(props: InspectorProps) {
         <SceneInspector {...props} placed={scene} />
       ) : track && clip ? (
         <ClipInspector {...props} track={track} clip={clip} />
+      ) : overlay ? (
+        <OverlayInspector {...props} {...overlay} onRemoved={() => props.onSelect(null)} />
       ) : (
         <Overview {...props} />
       )}
@@ -98,7 +104,7 @@ function SceneInspector({ timeline, sources, timeMs, canEdit, apply, onSelect, p
   );
 }
 
-type Track = Timeline['tracks'][number];
+type Track = Timeline['audioTracks'][number];
 
 function ClipInspector({ canEdit, apply, onSelect, track, clip }: InspectorProps & { track: Track; clip: Track['clips'][number] }) {
   const trackId = track.id;
@@ -134,17 +140,24 @@ function ClipInspector({ canEdit, apply, onSelect, track, clip }: InspectorProps
   );
 }
 
-function Overview({ timeline, sources, canEdit, apply }: InspectorProps) {
+function Overview({ timeline, sources, timeMs, canEdit, apply, onSelect }: InspectorProps) {
   const videos = sources.filter((s) => s.kind === 'video' && s.durationMs);
+  const images = sources.filter((s) => s.kind === 'image');
   const [mediaId, setMediaId] = useState(videos[0]?.id ?? '');
+  const [imageId, setImageId] = useState(images[0]?.id ?? '');
   const chosen = videos.find((v) => v.id === mediaId);
+  const addOverlay = (kind: OverlayKind) => {
+    const clip = createOverlay(crypto.randomUUID(), kind, timeMs, imageId);
+    apply((t) => t.addOverlay(clip));
+    onSelect({ kind: 'overlay', clipId: clip.id });
+  };
   return (
     <div className="space-y-4 text-sm text-slate-600">
       <div>
         <h2 className="text-sm font-semibold text-slate-900">Your edit</h2>
         <p className="mt-1">
-          {timeline.scenes.length} scene{timeline.scenes.length === 1 ? '' : 's'}, {formatTimecode(timeline.durationMs)} in total. Select a scene
-          or clip in the timeline to change it.
+          {timeline.scenes.length} scene{timeline.scenes.length === 1 ? '' : 's'}, {formatTimecode(timeline.durationMs)} in total. Select a scene,
+          clip or overlay to change it.
         </p>
       </div>
       <ul className="list-disc space-y-1 pl-4 text-xs">
@@ -166,6 +179,40 @@ function Overview({ timeline, sources, canEdit, apply }: InspectorProps) {
           <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!chosen} onClick={() => chosen?.durationMs && apply((t) => t.addScene(chosen.id, chosen.durationMs ?? 0))}>
             Add scene
           </Button>
+        </div>
+      )}
+      {canEdit && (
+        <div className="space-y-2 border-t border-slate-200 pt-4">
+          <p className="text-xs font-medium text-slate-600">Add an overlay at the playhead</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => addOverlay('text')}>
+              Add text
+            </Button>
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => addOverlay('shape')}>
+              Add shape
+            </Button>
+          </div>
+          {images.length > 0 ? (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label htmlFor="add-overlay-image" className="text-xs font-medium text-slate-600">
+                  Image
+                </label>
+                <select id="add-overlay-image" className="block w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" value={imageId} onChange={(e) => setImageId(e.target.value)}>
+                  {images.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!images.some((i) => i.id === imageId)} onClick={() => addOverlay('image')}>
+                Add image
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">Upload an image to this project to use it as an overlay.</p>
+          )}
         </div>
       )}
     </div>

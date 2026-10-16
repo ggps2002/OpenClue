@@ -129,6 +129,51 @@ describe('EditorPage', () => {
     expect(screen.getByRole('heading', { name: 'Your edit' })).toBeInTheDocument();
   });
 
+  it('adds a text overlay, animates it and saves it', async () => {
+    const fetchMock = mockApi({
+      'GET /projects/p1': () => respond(200, { project }),
+      'GET /projects/p1/timeline': () => respond(200, withTimeline),
+      'PUT /projects/p1/timeline': (init) => respond(200, { ...withTimeline, timeline: (JSON.parse(String(init?.body)) as { timeline: TimelineDoc }).timeline }),
+    });
+    renderAt('/app/projects/p1/editor');
+
+    fireEvent.change(await screen.findByLabelText('Playhead'), { target: { value: '1000' } });
+    expect(screen.getByText(/Upload an image to this project/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add text' }));
+
+    const inspector = screen.getByLabelText('Inspector');
+    expect(within(inspector).getByRole('heading', { name: 'Overlay 1' })).toBeInTheDocument();
+    const text = within(inspector).getByLabelText('Text');
+    await userEvent.clear(text);
+    await userEvent.type(text, 'Click Save');
+    fireEvent.blur(text);
+
+    const layer = screen.getByTestId('overlay-layer');
+    const box = within(layer).getByRole('button', { name: 'Overlay: Click Save' });
+    expect(box).toHaveStyle({ left: '50%', top: '50%' });
+    expect(within(screen.getByLabelText('Timeline')).getByRole('button', { name: /Click Save overlay at 0:01.0/ })).toBeInTheDocument();
+
+    // Nudging a static overlay moves its only keyframe.
+    fireEvent.keyDown(box, { key: 'ArrowRight' });
+    expect(within(layer).getByRole('button', { name: 'Overlay: Click Save' })).toHaveStyle({ left: '51%' });
+
+    await userEvent.click(within(inspector).getByRole('button', { name: 'Fade in and out' }));
+    expect(within(inspector).getAllByRole('button', { name: /Delete keyframe/ })).toHaveLength(4);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument();
+    const saved = sentBody(fetchMock, 'PUT') as { timeline: TimelineDoc };
+    const track = saved.timeline.tracks[1];
+    expect(track).toMatchObject({ kind: 'overlay', name: 'Overlay 1', hidden: false });
+    expect(track.kind === 'overlay' && track.clips[0]).toMatchObject({ startMs: 1000, durationMs: 3000, content: { type: 'text', text: 'Click Save' } });
+    expect(track.kind === 'overlay' && track.clips[0].keyframes.map((k) => [k.t, k.opacity, k.x])).toEqual([
+      [0, 0, 0.51],
+      [300, 1, 0.51],
+      [2700, 1, 0.51],
+      [3000, 0, 0.51],
+    ]);
+  });
+
   it('is read-only for viewers', async () => {
     mockApi({
       'GET /projects/p1': () => respond(200, { project: { ...project, role: 'viewer' } }),

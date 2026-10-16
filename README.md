@@ -39,6 +39,10 @@ on its own track), and lets you split scenes at the playhead, trim their start a
 buttons), mute a scene's own sound, add more project videos as scenes, and move or mute audio clips, with
 undo/redo and a live preview that plays the edit across scenes. Keyboard: Space plays/pauses, S splits,
 Ctrl+Z / Ctrl+Shift+Z undo and redo.
+The editor also adds **text, shape and image overlays** (images come from the project's uploads) on their
+own tracks. Drag an overlay in the preview (or nudge it with the arrow keys) to place it; add keyframes to
+animate its position, scale and opacity, with smooth or linear motion between them, or use "Fade in and
+out" for a quick entrance and exit.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 

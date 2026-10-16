@@ -1,3 +1,5 @@
+import type { OverlayClip, OverlayTrack } from './overlays';
+
 /** Mirrors server/src/modules/timelines/timelines.schema.ts. */
 export interface Scene {
   id: string;
@@ -28,10 +30,13 @@ export interface AudioTrack {
   clips: AudioClip[];
 }
 
+export type Track = AudioTrack | OverlayTrack;
+
 export interface TimelineDoc {
   version: 1;
   scenes: Scene[];
-  tracks: AudioTrack[];
+  /** Audio and overlay tracks; later overlay tracks are drawn on top. */
+  tracks: Track[];
 }
 
 /** A scene with its position on the timeline. */
@@ -49,8 +54,8 @@ export const clipLength = (clip: { inMs: number; outMs: number }) => clip.outMs 
 const defaultId = () => crypto.randomUUID();
 
 /**
- * The edit of a video: scenes (cuts of source videos) that play back to back, plus audio tracks laid
- * over them. Immutable: every edit returns a new Timeline, which keeps undo/redo and React state simple.
+ * The edit of a video: scenes (cuts of source videos) that play back to back, plus audio and overlay
+ * tracks laid over them. Immutable: every edit returns a new Timeline, which keeps undo/redo and React state simple.
  */
 export class Timeline {
   constructor(
@@ -62,8 +67,16 @@ export class Timeline {
     return this.doc.scenes;
   }
 
-  get tracks(): AudioTrack[] {
+  get tracks(): Track[] {
     return this.doc.tracks;
+  }
+
+  get audioTracks(): AudioTrack[] {
+    return this.doc.tracks.filter((t): t is AudioTrack => t.kind === 'audio');
+  }
+
+  get overlayTracks(): OverlayTrack[] {
+    return this.doc.tracks.filter((t): t is OverlayTrack => t.kind === 'overlay');
   }
 
   /** Length of the scenes played back to back. */
@@ -71,10 +84,11 @@ export class Timeline {
     return this.doc.scenes.reduce((sum, s) => sum + clipLength(s), 0);
   }
 
-  /** The whole edit, including audio that runs past the last scene. */
+  /** The whole edit, including audio or overlays that run past the last scene. */
   get durationMs(): number {
-    const audioEnd = Math.max(0, ...this.doc.tracks.flatMap((t) => t.clips.map((c) => c.startMs + clipLength(c))));
-    return Math.max(this.videoDurationMs, audioEnd);
+    const audioEnd = Math.max(0, ...this.audioTracks.flatMap((t) => t.clips.map((c) => c.startMs + clipLength(c))));
+    const overlayEnd = Math.max(0, ...this.overlayTracks.flatMap((t) => t.clips.map((c) => c.startMs + c.durationMs)));
+    return Math.max(this.videoDurationMs, audioEnd, overlayEnd);
   }
 
   placements(): PlacedScene[] {
@@ -164,20 +178,65 @@ export class Timeline {
     return this.with({ scenes: [...this.doc.scenes, scene] });
   }
 
-  /** Slides an audio clip along the timeline (never before 0). */
+  /** Slides an audio or overlay clip along the timeline (never before 0). */
   moveClip(trackId: string, clipId: string, startMs: number): Timeline {
-    return this.updateTrack(trackId, (track) => ({
-      ...track,
-      clips: track.clips.map((c) => (c.id === clipId ? { ...c, startMs: Math.max(0, Math.round(startMs)) } : c)),
-    }));
+    const start = Math.max(0, Math.round(startMs));
+    return this.updateTrack(trackId, (track) =>
+      track.kind === 'audio'
+        ? { ...track, clips: track.clips.map((c) => (c.id === clipId ? { ...c, startMs: start } : c)) }
+        : { ...track, clips: track.clips.map((c) => (c.id === clipId ? { ...c, startMs: start } : c)) },
+    );
   }
 
+  /** Removes a clip; an overlay track left empty goes with it. */
   removeClip(trackId: string, clipId: string): Timeline {
-    return this.updateTrack(trackId, (track) => ({ ...track, clips: track.clips.filter((c) => c.id !== clipId) }));
+    const track = this.doc.tracks.find((t) => t.id === trackId);
+    if (track?.kind === 'overlay' && track.clips.every((c) => c.id === clipId)) {
+      return this.with({ tracks: this.doc.tracks.filter((t) => t.id !== trackId) });
+    }
+    return this.updateTrack(trackId, (t) =>
+      t.kind === 'audio' ? { ...t, clips: t.clips.filter((c) => c.id !== clipId) } : { ...t, clips: t.clips.filter((c) => c.id !== clipId) },
+    );
   }
 
   setTrackMuted(trackId: string, muted: boolean): Timeline {
-    return this.updateTrack(trackId, (track) => ({ ...track, muted }));
+    return this.updateTrack(trackId, (track) => (track.kind === 'audio' ? { ...track, muted } : track));
+  }
+
+  setTrackHidden(trackId: string, hidden: boolean): Timeline {
+    return this.updateTrack(trackId, (track) => (track.kind === 'overlay' ? { ...track, hidden } : track));
+  }
+
+  overlay(clipId: string): { track: OverlayTrack; clip: OverlayClip } | undefined {
+    for (const track of this.overlayTracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip) return { track, clip };
+    }
+    return undefined;
+  }
+
+  /** Overlays showing at `timeMs`, bottom first, with their time since they started. */
+  overlaysAt(timeMs: number): { track: OverlayTrack; clip: OverlayClip; localMs: number }[] {
+    return this.overlayTracks.flatMap((track) =>
+      track.clips.filter((c) => timeMs >= c.startMs && timeMs < c.startMs + c.durationMs).map((clip) => ({ track, clip, localMs: timeMs - clip.startMs })),
+    );
+  }
+
+  /** Adds an overlay on the top-most overlay track with room for it, or on a new track on top. */
+  addOverlay(clip: OverlayClip): Timeline {
+    const end = clip.startMs + clip.durationMs;
+    const free = [...this.overlayTracks]
+      .reverse()
+      .find((t) => t.clips.every((c) => c.startMs >= end || c.startMs + c.durationMs <= clip.startMs));
+    if (free) return this.updateTrack(free.id, (t) => (t.kind === 'overlay' ? { ...t, clips: [...t.clips, clip] } : t));
+    const track: OverlayTrack = { id: this.createId(), kind: 'overlay', name: `Overlay ${this.overlayTracks.length + 1}`, hidden: false, clips: [clip] };
+    return this.with({ tracks: [...this.doc.tracks, track] });
+  }
+
+  updateOverlay(clipId: string, update: (clip: OverlayClip) => OverlayClip): Timeline {
+    const found = this.overlay(clipId);
+    if (!found) return this;
+    return this.updateTrack(found.track.id, (t) => (t.kind === 'overlay' ? { ...t, clips: t.clips.map((c) => (c.id === clipId ? update(c) : c)) } : t));
   }
 
   toJSON(): TimelineDoc {
@@ -193,7 +252,7 @@ export class Timeline {
     return this.with({ scenes: this.doc.scenes.map((s) => (s.id === id ? update(s) : s)) });
   }
 
-  private updateTrack(id: string, update: (track: AudioTrack) => AudioTrack): Timeline {
+  private updateTrack(id: string, update: (track: Track) => Track): Timeline {
     if (!this.doc.tracks.some((t) => t.id === id)) return this;
     return this.with({ tracks: this.doc.tracks.map((t) => (t.id === id ? update(t) : t)) });
   }

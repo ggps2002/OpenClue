@@ -12,7 +12,7 @@ import { StorageService } from '../src/lib/storage';
 import { MediaService } from '../src/modules/media/media.service';
 import { ProjectService } from '../src/modules/projects/projects.service';
 import { ScriptService } from '../src/modules/scripts/scripts.service';
-import type { TimelineDoc } from '../src/modules/timelines/timelines.schema';
+import { timelineDocSchema, type OverlayClip, type TimelineDoc } from '../src/modules/timelines/timelines.schema';
 import { TimelineService } from '../src/modules/timelines/timelines.service';
 import { TranscriptService } from '../src/modules/transcripts/transcripts.service';
 import { VoiceoverService } from '../src/modules/voiceovers/voiceovers.service';
@@ -39,6 +39,28 @@ async function makeVideo(name: string) {
   await ffmpeg.exec(['-y', '-f', 'lavfi', '-i', 'testsrc=duration=2:size=160x120:rate=10', '-pix_fmt', 'yuv420p', '-f', 'mp4', filePath]);
   return { path: filePath, originalname: name, mimetype: 'video/mp4', size: fs.statSync(filePath).size };
 }
+
+/** A one-frame PNG to use as an image overlay. */
+async function makeImage(name: string) {
+  const filePath = path.join(tmp, `${Date.now()}-${name}`);
+  await ffmpeg.exec(['-y', '-f', 'lavfi', '-i', 'color=c=red:size=16x16', '-frames:v', '1', filePath]);
+  return { path: filePath, originalname: name, mimetype: 'image/png', size: fs.statSync(filePath).size };
+}
+
+function overlay(content: OverlayClip['content'], overrides: Partial<OverlayClip> = {}): OverlayClip {
+  return {
+    id: `o-${content.type}`,
+    startMs: 0,
+    durationMs: 1000,
+    width: 0.3,
+    height: 0.2,
+    content,
+    keyframes: [{ t: 0, x: 0.5, y: 0.5, scale: 1, opacity: 1, easing: 'linear' }],
+    ...overrides,
+  };
+}
+
+const textContent: OverlayClip['content'] = { type: 'text', text: 'Hello', color: '#ffffff', fontSize: 0.06, bold: true, align: 'center', background: null };
 
 function doc(mediaId: string, overrides: Partial<TimelineDoc> = {}): TimelineDoc {
   return {
@@ -136,6 +158,41 @@ describe('TimelineService', () => {
       tracks: [{ id: 't1', kind: 'audio', name: 'Music', muted: false, clips: [{ id: 'c1', source: { type: 'media', mediaId: videoId }, startMs: 300, inMs: 0, outMs: 1000 }] }],
     });
     expect((await service.save(owner.id, projectId, musicClip)).timeline?.tracks[0].clips[0].startMs).toBe(300);
+  });
+
+  it('saves overlays and checks that images belong to the project', async () => {
+    const imageId = (await media.upload(owner.id, owner.workspaceId, await makeImage('logo.png'), projectId)).id;
+    expect((await service.get(owner.id, projectId)).sources.find((s) => s.id === imageId)).toMatchObject({ kind: 'image', durationMs: null });
+
+    const clips = [
+      overlay(textContent),
+      overlay({ type: 'shape', shape: 'ellipse', fill: '#ff0000', stroke: null }),
+      overlay({ type: 'image', mediaId: imageId }),
+    ];
+    const withOverlays = doc(videoId, { tracks: [{ id: 't1', kind: 'overlay', name: 'Overlay 1', hidden: false, clips }] });
+    expect((await service.save(owner.id, projectId, withOverlays)).timeline?.tracks).toEqual(withOverlays.tracks);
+
+    const missing = doc(videoId, {
+      tracks: [{ id: 't1', kind: 'overlay', name: 'Overlay 1', hidden: false, clips: [overlay({ type: 'image', mediaId: videoId })] }],
+    });
+    await expect(service.save(owner.id, projectId, missing)).rejects.toThrow(/no longer in this project/);
+
+    // An image is not an audio source.
+    const imageAudio = doc(videoId, {
+      tracks: [{ id: 't1', kind: 'audio', name: 'Music', muted: false, clips: [{ id: 'c1', source: { type: 'media', mediaId: imageId }, startMs: 0, inMs: 0, outMs: 500 }] }],
+    });
+    await expect(service.save(owner.id, projectId, imageAudio)).rejects.toThrow(/no longer in this project/);
+  });
+
+  it('rejects keyframes out of order or past the end of the overlay', () => {
+    const k = (t: number) => ({ t, x: 0.5, y: 0.5, scale: 1, opacity: 1, easing: 'linear' as const });
+    const parse = (keyframes: OverlayClip['keyframes']) =>
+      timelineDocSchema.safeParse(doc('m', { tracks: [{ id: 't1', kind: 'overlay', name: 'O', hidden: false, clips: [overlay(textContent, { keyframes })] }] })).success;
+    expect(parse([k(0), k(500), k(1000)])).toBe(true);
+    expect(parse([k(0), k(0)])).toBe(false);
+    expect(parse([k(600), k(300)])).toBe(false);
+    expect(parse([k(0), k(1500)])).toBe(false);
+    expect(parse([])).toBe(false);
   });
 
   it('is removed with its project', async () => {

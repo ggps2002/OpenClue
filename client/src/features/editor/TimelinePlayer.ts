@@ -68,7 +68,7 @@ export class TimelinePlayer {
   setTimeline(timeline: Timeline): void {
     this.timeline = timeline;
     for (const [id, entry] of this.audio) {
-      if (!timeline.tracks.some((t) => t.clips.some((c) => c.id === id))) {
+      if (!timeline.audioTracks.some((t) => t.clips.some((c) => c.id === id))) {
         entry.element.pause();
         this.audio.delete(id);
       }
@@ -166,7 +166,7 @@ export class TimelinePlayer {
       this.video.pause();
     }
 
-    for (const track of timeline?.tracks ?? []) {
+    for (const track of timeline?.audioTracks ?? []) {
       for (const clip of track.clips) {
         const entry = this.audioFor(clip.id, clip.source);
         const offset = this.timeMs - clip.startMs;

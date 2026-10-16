@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { Inspector } from './Inspector';
+import { OverlayLayer } from './OverlayLayer';
+import { setValuesAt } from './overlays';
 import { PreviewPlayer } from './PreviewPlayer';
 import { Timeline } from './Timeline';
 import { timelineApi, type TimelineData } from './timeline.api';
@@ -26,6 +28,7 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
   const [error, setError] = useState<string>();
   const dirty = timeline.doc !== saved;
   const { timeMs } = player.state;
+  const imageUrls = useMemo(() => new Map(data.sources.filter((s) => s.kind === 'image').map((s) => [s.id, s.url])), [data.sources]);
 
   const save = async () => {
     setSaving(true);
@@ -108,7 +111,17 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
           durationMs={timeline.durationMs}
           onToggle={player.toggle}
           onSeek={player.seek}
-        />
+        >
+          <OverlayLayer
+            timeline={timeline}
+            timeMs={timeMs}
+            imageUrls={imageUrls}
+            selectedId={selection?.kind === 'overlay' ? selection.clipId : null}
+            canEdit={canEdit}
+            onSelect={(clipId) => setSelection({ kind: 'overlay', clipId })}
+            onMove={(clipId, localMs, position) => apply((t) => t.updateOverlay(clipId, (c) => setValuesAt(c, localMs, position)))}
+          />
+        </PreviewPlayer>
         <Inspector
           timeline={timeline}
           sources={data.sources}
@@ -117,6 +130,7 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
           canEdit={canEdit}
           apply={apply}
           onSelect={setSelection}
+          onSeek={player.seek}
         />
       </div>
       <TimelineStrip
