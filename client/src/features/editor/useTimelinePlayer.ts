@@ -3,11 +3,12 @@ import type { AudioSource, Timeline } from './Timeline';
 import type { TimelineData } from './timeline.api';
 import { TimelinePlayer, type PlayerState } from './TimelinePlayer';
 
-/** Creates a TimelinePlayer bound to the returned video ref and mirrors its state into React. */
+/** Creates a TimelinePlayer bound to the two returned video refs and mirrors its state into React. */
 export function useTimelinePlayer(timeline: Timeline, data: Pick<TimelineData, 'sources' | 'voiceover'>) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const firstVideo = useRef<HTMLVideoElement>(null);
+  const secondVideo = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<TimelinePlayer | null>(null);
-  const [state, setState] = useState<PlayerState>({ timeMs: 0, playing: false, sceneId: null });
+  const [state, setState] = useState<PlayerState>({ timeMs: 0, playing: false, sceneId: null, slot: 0, transition: null });
 
   // The player lives as long as the component; it reads URLs through a ref so reloading the
   // sources (e.g. after a save) doesn't recreate it and lose the playhead.
@@ -18,11 +19,11 @@ export function useTimelinePlayer(timeline: Timeline, data: Pick<TimelineData, '
   voiceoverUrl.current = data.voiceover?.url ?? null;
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const [first, second] = [firstVideo.current, secondVideo.current];
+    if (!first || !second) return;
     const resolveUrl = (source: AudioSource) =>
       source.type === 'voiceover' ? voiceoverUrl.current : (urls.current.get(source.mediaId) ?? null);
-    const player = new TimelinePlayer(video, { resolveUrl });
+    const player = new TimelinePlayer([first, second], { resolveUrl });
     playerRef.current = player;
     const unsubscribe = player.subscribe(setState);
     return () => {
@@ -44,5 +45,6 @@ export function useTimelinePlayer(timeline: Timeline, data: Pick<TimelineData, '
     }),
     [],
   );
-  return { videoRef, state, ...controls };
+  const videoRefs = useMemo(() => [firstVideo, secondVideo] as const, []);
+  return { videoRefs, state, ...controls };
 }

@@ -82,6 +82,37 @@ describe('Timeline', () => {
     expect(timeline.addScene('m2', 2500.2).scenes[2]).toEqual({ id: 'new-1', name: 'Scene 3', mediaId: 'm2', inMs: 0, outMs: 2500, muted: false });
   });
 
+  it('overlaps scenes joined by a transition and reports its progress', () => {
+    const timeline = make().setTransition('b', { type: 'fade', durationMs: 1000 });
+    expect(timeline.placements().map((p) => [p.startMs, p.endMs])).toEqual([
+      [0, 4000],
+      [3000, 6000],
+    ]);
+    expect(timeline.videoDurationMs).toBe(6000);
+    expect(timeline.sceneAt(3500)).toMatchObject({ scene: { id: 'b' }, sourceMs: 6500 });
+    expect(timeline.transitionAt(3500)).toMatchObject({ type: 'fade', progress: 0.5, from: { scene: { id: 'a' }, sourceMs: 3500 }, to: { scene: { id: 'b' } } });
+    expect(timeline.transitionAt(2999)).toBeNull();
+    expect(timeline.transitionAt(4000)).toBeNull();
+    expect(timeline.setTransition('b', null).videoDurationMs).toBe(7000);
+  });
+
+  it('keeps transitions within half of each scene as scenes change', () => {
+    const timeline = make().setTransition('b', { type: 'wipeleft', durationMs: 5000 });
+    expect(timeline.scene('b')?.transition).toEqual({ type: 'wipeleft', durationMs: 1500 });
+    expect(timeline.setTransition('a', { type: 'fade', durationMs: 500 }).scene('a')?.transition).toBeNull();
+    expect(timeline.moveScene('b', 0).scene('b')?.transition).toBeNull();
+    expect(timeline.trimScene('b', { outMs: 6500 }).scene('b')?.transition?.durationMs).toBe(250);
+    expect(timeline.trimScene('b', { outMs: 6100 }).scene('b')?.transition).toBeNull();
+    // Splitting keeps the transition on the first half; the new cut is a hard cut.
+    const split = make().setTransition('b', { type: 'fade', durationMs: 800 }).splitAt(5000);
+    expect(split.scenes.map((s) => [s.inMs, s.transition?.durationMs ?? null])).toEqual([
+      [0, null],
+      [6000, 800],
+      [7800, null],
+    ]);
+    expect(split.setAllTransitions({ type: 'slideup', durationMs: 400 }).scenes.map((s) => s.transition?.type ?? null)).toEqual([null, 'slideup', 'slideup']);
+  });
+
   it('edits audio tracks', () => {
     const timeline = make();
     expect(timeline.setTrackMuted('t1', true).audioTracks[0].muted).toBe(true);

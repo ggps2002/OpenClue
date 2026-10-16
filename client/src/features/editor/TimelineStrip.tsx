@@ -2,6 +2,7 @@ import { useState, type DragEvent, type MouseEvent, type ReactNode } from 'react
 import { cn } from '../../lib/cn';
 import { formatDuration, formatTimecode } from '../../lib/format';
 import { overlayLabel, type OverlayTrack } from './overlays';
+import { TRANSITION_LABELS } from './transitions';
 import { clipLength, type AudioTrack, type Timeline } from './Timeline';
 import type { TimelineSource } from './timeline.api';
 
@@ -105,6 +106,18 @@ export function TimelineStrip(props: TimelineStripProps) {
               </button>
             );
           })}
+          {timeline.placements().map(({ scene, startMs }) =>
+            scene.transition ? (
+              <span
+                key={`transition-${scene.id}`}
+                title={`${TRANSITION_LABELS[scene.transition.type]}, ${formatTimecode(scene.transition.durationMs)}`}
+                role="img"
+                aria-label={`${TRANSITION_LABELS[scene.transition.type]} into ${scene.name || 'scene'}`}
+                className="pointer-events-none absolute inset-y-3 rounded bg-gradient-to-r from-indigo-500/10 via-indigo-500/60 to-indigo-500/10 ring-1 ring-indigo-500"
+                style={{ left: pct(startMs, total), width: pct(scene.transition.durationMs, total) }}
+              />
+            ) : null,
+          )}
           {playhead}
         </div>
 

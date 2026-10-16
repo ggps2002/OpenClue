@@ -106,7 +106,7 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
       {error && <Alert>{error}</Alert>}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <PreviewPlayer
-          videoRef={player.videoRef}
+          videoRefs={player.videoRefs}
           state={player.state}
           durationMs={timeline.durationMs}
           onToggle={player.toggle}

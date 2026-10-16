@@ -1,4 +1,5 @@
 import type { OverlayClip, OverlayTrack } from './overlays';
+import { fitTransitions, type Transition, type TransitionType } from './transitions';
 
 /** Mirrors server/src/modules/timelines/timelines.schema.ts. */
 export interface Scene {
@@ -9,6 +10,8 @@ export interface Scene {
   outMs: number;
   /** Silences the video's own sound. */
   muted: boolean;
+  /** Transition from the previous scene into this one; absent or null is a hard cut. */
+  transition?: Transition | null;
 }
 
 export type AudioSource = { type: 'voiceover' } | { type: 'media'; mediaId: string };
@@ -47,6 +50,15 @@ export interface PlacedScene {
   endMs: number;
 }
 
+/** Two scenes overlapping while one takes over from the other. */
+export interface ActiveTransition {
+  type: TransitionType;
+  from: PlacedScene & { sourceMs: number };
+  to: PlacedScene & { sourceMs: number };
+  /** 0 at the start of the overlap, approaching 1 at its end. */
+  progress: number;
+}
+
 export const MIN_CLIP_MS = 100;
 
 export const clipLength = (clip: { inMs: number; outMs: number }) => clip.outMs - clip.inMs;
@@ -79,9 +91,9 @@ export class Timeline {
     return this.doc.tracks.filter((t): t is OverlayTrack => t.kind === 'overlay');
   }
 
-  /** Length of the scenes played back to back. */
+  /** Length of the scenes played back to back (transitions overlap neighbours, so they shorten it). */
   get videoDurationMs(): number {
-    return this.doc.scenes.reduce((sum, s) => sum + clipLength(s), 0);
+    return this.placements().at(-1)?.endMs ?? 0;
   }
 
   /** The whole edit, including audio or overlays that run past the last scene. */
@@ -91,12 +103,13 @@ export class Timeline {
     return Math.max(this.videoDurationMs, audioEnd, overlayEnd);
   }
 
+  /** Where each scene plays; a scene with a transition starts that much before the previous one ends. */
   placements(): PlacedScene[] {
-    let startMs = 0;
+    let endMs = 0;
     return this.doc.scenes.map((scene, index) => {
-      const placed = { scene, index, startMs, endMs: startMs + clipLength(scene) };
-      startMs = placed.endMs;
-      return placed;
+      const startMs = endMs - (index > 0 ? (scene.transition?.durationMs ?? 0) : 0);
+      endMs = startMs + clipLength(scene);
+      return { scene, index, startMs, endMs };
     });
   }
 
@@ -108,10 +121,33 @@ export class Timeline {
     return this.placements().find((p) => p.scene.id === id);
   }
 
-  /** The scene playing at `timeMs` and the matching time in its source video; null after the last scene. */
+  /**
+   * The scene playing at `timeMs` and the matching time in its source video; null after the last scene.
+   * During a transition this is the incoming scene.
+   */
   sceneAt(timeMs: number): (PlacedScene & { sourceMs: number }) | null {
-    const placed = this.placements().find((p) => timeMs >= p.startMs && timeMs < p.endMs);
-    return placed ? { ...placed, sourceMs: placed.scene.inMs + (timeMs - placed.startMs) } : null;
+    const placed = [...this.placements()].reverse().find((p) => timeMs >= p.startMs && timeMs < p.endMs);
+    return placed ? withSource(placed, timeMs) : null;
+  }
+
+  /** The transition in progress at `timeMs`, if any. */
+  transitionAt(timeMs: number): ActiveTransition | null {
+    const to = this.sceneAt(timeMs);
+    const transition = to?.scene.transition;
+    if (!to || !transition || to.index === 0) return null;
+    const from = this.placements()[to.index - 1];
+    if (timeMs >= from.endMs) return null;
+    return { type: transition.type, from: withSource(from, timeMs), to, progress: (timeMs - to.startMs) / transition.durationMs };
+  }
+
+  /** Sets (or with null removes) the transition into a scene, fitted to the scenes it joins. */
+  setTransition(sceneId: string, transition: Transition | null): Timeline {
+    return this.updateScene(sceneId, (scene) => ({ ...scene, transition }));
+  }
+
+  /** Puts the same transition on every cut between scenes. */
+  setAllTransitions(transition: Transition | null): Timeline {
+    return this.with({ scenes: this.doc.scenes.map((scene, i) => (i === 0 ? scene : { ...scene, transition })) });
   }
 
   /** True when `timeMs` falls inside a scene with room for a minimum-length scene on both sides. */
@@ -126,7 +162,7 @@ export class Timeline {
     if (!hit || !this.canSplitAt(timeMs)) return this;
     const { scene, sourceMs } = hit;
     const first = { ...scene, outMs: sourceMs };
-    const second = { ...scene, id: this.createId(), name: nextName(scene.name), inMs: sourceMs };
+    const second = { ...scene, id: this.createId(), name: nextName(scene.name), inMs: sourceMs, transition: null };
     const scenes = [...this.doc.scenes];
     scenes.splice(hit.index, 1, first, second);
     return this.with({ scenes });
@@ -243,8 +279,10 @@ export class Timeline {
     return this.doc;
   }
 
+  /** Every scene edit goes through here, so transitions are refitted whenever scene lengths or order change. */
   private with(changes: Partial<TimelineDoc>): Timeline {
-    return new Timeline({ ...this.doc, ...changes }, this.createId);
+    const scenes = changes.scenes ? fitTransitions(changes.scenes) : this.doc.scenes;
+    return new Timeline({ ...this.doc, ...changes, scenes }, this.createId);
   }
 
   private updateScene(id: string, update: (scene: Scene) => Scene): Timeline {
@@ -256,6 +294,10 @@ export class Timeline {
     if (!this.doc.tracks.some((t) => t.id === id)) return this;
     return this.with({ tracks: this.doc.tracks.map((t) => (t.id === id ? update(t) : t)) });
   }
+}
+
+function withSource(placed: PlacedScene, timeMs: number): PlacedScene & { sourceMs: number } {
+  return { ...placed, sourceMs: placed.scene.inMs + (timeMs - placed.startMs) };
 }
 
 /** Rounds to whole ms and clamps; the lower bound wins if the range is empty. */

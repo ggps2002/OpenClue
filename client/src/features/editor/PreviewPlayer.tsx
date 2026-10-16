@@ -1,10 +1,11 @@
-import type { ReactNode, RefObject } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatTimecode } from '../../lib/format';
-import type { PlayerState } from './TimelinePlayer';
+import type { PlayerState, VideoSlot } from './TimelinePlayer';
+import { transitionStyles } from './transitions';
 
 interface PreviewPlayerProps {
-  videoRef: RefObject<HTMLVideoElement>;
+  videoRefs: readonly [RefObject<HTMLVideoElement>, RefObject<HTMLVideoElement>];
   state: PlayerState;
   durationMs: number;
   onToggle(): void;
@@ -13,18 +14,38 @@ interface PreviewPlayerProps {
   children?: ReactNode;
 }
 
-/** The live preview: a video element driven by the TimelinePlayer (plus any overlays), with play/pause and a scrubber. */
-export function PreviewPlayer({ videoRef, state, durationMs, onToggle, onSeek, children }: PreviewPlayerProps) {
+/** Shows the slot with the current scene; during a transition both slots show, styled by the transition. */
+function slotStyle(state: PlayerState, slot: VideoSlot): CSSProperties {
+  const incoming = slot === state.slot;
+  if (state.sceneId === null) return { opacity: 0 };
+  if (!state.transition) return { opacity: incoming ? 1 : 0, zIndex: incoming ? 1 : 0 };
+  const styles = transitionStyles(state.transition.type, state.transition.progress);
+  return { ...(incoming ? styles.to : styles.from), zIndex: incoming ? 1 : 0 };
+}
+
+/** The live preview: two video elements driven by the TimelinePlayer (plus any overlays), with play/pause and a scrubber. */
+export function PreviewPlayer({ videoRefs, state, durationMs, onToggle, onSeek, children }: PreviewPlayerProps) {
   return (
     <div className="self-start overflow-hidden rounded-2xl bg-slate-900">
-      <div className="relative aspect-video">
-        <video ref={videoRef} className="h-full w-full object-contain" playsInline preload="auto" aria-label="Preview" />
+      <div className="relative aspect-video overflow-hidden bg-black">
+        {([0, 1] as const).map((slot) => (
+          <video
+            key={slot}
+            ref={videoRefs[slot]}
+            className="absolute inset-0 h-full w-full object-contain"
+            style={slotStyle(state, slot)}
+            playsInline
+            preload="auto"
+            aria-label={slot === state.slot ? 'Preview' : undefined}
+            aria-hidden={slot !== state.slot}
+          />
+        ))}
         {state.sceneId === null && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
+          <div className="absolute inset-0 z-[2] flex items-center justify-center text-sm text-slate-400">
             {durationMs === 0 ? 'Add a scene to see a preview' : 'End of video'}
           </div>
         )}
-        {children}
+        <div className="pointer-events-none absolute inset-0 z-[3]">{children}</div>
       </div>
       <div className="flex items-center gap-3 bg-slate-800 px-4 py-2">
         <Button

@@ -110,6 +110,33 @@ describe('EditorPage', () => {
     ]);
   });
 
+  it('adds a transition between scenes, fitted to the scenes it joins', async () => {
+    const twoScenes = { ...doc, scenes: [...doc.scenes, { id: 's2', name: 'Outro', mediaId: 'm0', inMs: 0, outMs: 4000, muted: false }] };
+    const fetchMock = mockApi({
+      'GET /projects/p1': () => respond(200, { project }),
+      'GET /projects/p1/timeline': () => respond(200, { ...withTimeline, timeline: twoScenes }),
+      'PUT /projects/p1/timeline': (init) => respond(200, { ...withTimeline, timeline: (JSON.parse(String(init?.body)) as { timeline: TimelineDoc }).timeline }),
+    });
+    renderAt('/app/projects/p1/editor');
+
+    const strip = await screen.findByLabelText('Timeline');
+    await userEvent.click(within(strip).getByRole('button', { name: /^Outro/ }));
+    const inspector = screen.getByLabelText('Inspector');
+    await userEvent.selectOptions(within(inspector).getByLabelText(/Transition from/), 'Crossfade');
+    expect(within(strip).getByRole('img', { name: 'Crossfade into Outro' })).toBeInTheDocument();
+    expect(screen.getByText('0:00.0 / 0:13.5')).toBeInTheDocument();
+
+    const length = within(inspector).getByLabelText(/Length \(s, up to 2.0\)/);
+    await userEvent.clear(length);
+    await userEvent.type(length, '3{Enter}');
+    expect(length).toHaveValue(2);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument();
+    const saved = sentBody(fetchMock, 'PUT') as { timeline: TimelineDoc };
+    expect(saved.timeline.scenes[1].transition).toEqual({ type: 'fade', durationMs: 2000 });
+  });
+
   it('reorders and deletes scenes from the inspector', async () => {
     const twoScenes = { ...doc, scenes: [...doc.scenes, { id: 's2', name: 'Outro', mediaId: 'm0', inMs: 0, outMs: 4000, muted: false }] };
     mockApi({

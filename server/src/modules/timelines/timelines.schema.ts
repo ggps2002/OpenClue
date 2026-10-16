@@ -7,9 +7,19 @@ export const MAX_CLIPS_PER_TRACK = 500;
 /** Shortest scene or clip the editor allows; anything shorter can't be seen or heard. */
 export const MIN_CLIP_MS = 100;
 export const MAX_KEYFRAMES = 50;
+export const MIN_TRANSITION_MS = 100;
+export const MAX_TRANSITION_MS = 5000;
+/** Same names as ffmpeg's xfade transitions so the render can pass them straight through. */
+export const TRANSITION_TYPES = ['fade', 'fadeblack', 'wipeleft', 'wiperight', 'slideleft', 'slideup'] as const;
 
 const id = z.string().min(1).max(64);
 const ms = z.number().int().min(0);
+
+/** How a scene takes over from the one before it. The two scenes overlap by `durationMs`. */
+export const transitionSchema = z.object({
+  type: z.enum(TRANSITION_TYPES),
+  durationMs: z.number().int().min(MIN_TRANSITION_MS).max(MAX_TRANSITION_MS),
+});
 
 /** A cut of a source video between `inMs` and `outMs`. Scenes play back to back in order. */
 export const sceneSchema = z
@@ -21,6 +31,8 @@ export const sceneSchema = z
     outMs: ms,
     /** Silences the video's own sound, e.g. when a voiceover replaces the narration. */
     muted: z.boolean(),
+    /** Transition from the previous scene into this one; absent or null is a hard cut. */
+    transition: transitionSchema.nullable().optional(),
   })
   .refine((s) => s.outMs - s.inMs >= MIN_CLIP_MS, { message: `A scene must be at least ${MIN_CLIP_MS} ms long`, path: ['outMs'] });
 
@@ -120,17 +132,38 @@ export const timelineDocSchema = z
       ids.add(value);
     };
     doc.scenes.forEach((s, i) => check(s.id, ['scenes', i, 'id']));
+    checkTransitions(doc.scenes, ctx);
     doc.tracks.forEach((t, i) => {
       check(t.id, ['tracks', i, 'id']);
       t.clips.forEach((c, j) => check(c.id, ['tracks', i, 'clips', j, 'id']));
     });
   });
 
+/**
+ * A transition may use at most half of each scene it joins, so a scene never overlaps more than one
+ * neighbour at a time. The first scene has nothing to transition from.
+ */
+function checkTransitions(scenes: z.infer<typeof sceneSchema>[], ctx: z.RefinementCtx): void {
+  scenes.forEach((scene, i) => {
+    if (!scene.transition) return;
+    const path = ['scenes', i, 'transition', 'durationMs'];
+    if (i === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'The first scene cannot have a transition', path: ['scenes', i, 'transition'] });
+      return;
+    }
+    const shortest = Math.min(scene.outMs - scene.inMs, scenes[i - 1].outMs - scenes[i - 1].inMs);
+    if (scene.transition.durationMs * 2 > shortest) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A transition can last at most half of each scene it joins', path });
+    }
+  });
+}
+
 export const saveTimelineSchema = z.object({ timeline: timelineDocSchema });
 export const createTimelineSchema = z.object({ mediaId: id.optional() });
 
 export type TimelineDoc = z.infer<typeof timelineDocSchema>;
 export type Scene = z.infer<typeof sceneSchema>;
+export type Transition = z.infer<typeof transitionSchema>;
 export type Track = z.infer<typeof trackSchema>;
 export type AudioTrack = z.infer<typeof audioTrackSchema>;
 export type OverlayTrack = z.infer<typeof overlayTrackSchema>;

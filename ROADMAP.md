@@ -13,7 +13,7 @@ Each scheduled run takes the first unchecked milestone, builds a working slice, 
   - [x] 6a. `Timeline` model class (scenes, audio tracks, clips): split, trim, reorder, mute, add/remove; persisted per project (`Timeline` table), seeded from a project video + the voiceover track; editor page with undo/redo.
   - [x] 6e. Live preview player (`TimelinePlayer` class) that plays the edit across scenes with the audio tracks in sync.
   - [x] 6b. Text, shape and image overlays on their own tracks, with keyframed position, scale and opacity (and preview rendering).
-  - [ ] 6c. Transitions between scenes (fade, slide, …) in the model and the preview.
+  - [x] 6c. Transitions between scenes (fade, slide, …) in the model and the preview.
   - [ ] 6d. Automatic zoom/spotlight effects generated from recorded click data, editable on the timeline.
   - [ ] 6f. Editor ergonomics: drag handles to trim on the strip, timeline zoom, dragging audio clips.
 - [ ] 7. **Captions.** Auto-generate captions from the script/voiceover, with brand-styleable caption presets. Export SRT and VTT.
@@ -61,8 +61,17 @@ Stretch (only after 1–16): AI presenter avatars, an MCP server exposing projec
 
 - **2026-10-16 — Overlays are `overlay` tracks in the timeline document** (tracks are a union on `kind`; `version` stays 1 because the change is additive). Each overlay clip has `startMs`/`durationMs`, a box (`width`/`height`) and content (`text | shape | image`), and is positioned in the **16:9 output frame** using fractions (x/y = box centre, may go off-frame for slide-ins), so the preview and the milestone 8 render share one coordinate system. Text size is a fraction of frame height (CSS `cqh` in the preview).
 - **2026-10-16 — Keyframes are relative to the overlay's start** (`t` ms, sorted, at least one). A single keyframe means a static overlay, so editing values or dragging changes it; with several, edits go to the keyframe under the playhead (±50 ms) or add one there. `easing` on a keyframe shapes the move to the next one (`linear` or smoothstep `easeInOut`). Keyframe maths lives in `client/src/features/editor/overlays.ts`; the server only validates.
+- **2026-10-16 — Transitions overlap scenes (NLE/xfade semantics).** `scene.transition = { type, durationMs }` (optional, so older documents stay valid at `version: 1`) is the transition *into* that scene; the scene starts `durationMs` before the previous one ends, so transitions shorten the edit while audio and overlays keep their absolute times. Type names are ffmpeg `xfade` names (`fade`, `fadeblack`, `wipeleft`, `wiperight`, `slideleft`, `slideup`) so milestone 8 can pass them through (`offset` = previous scene's end − duration). A transition may use at most half of each scene it joins (no scene ever overlaps two neighbours); the client refits transitions after every scene edit, the server rejects violations.
+- **2026-10-16 — The preview uses two alternating `<video>` elements** (scene index parity picks the slot). The next scene is loaded and cued in the idle element, which also removes the source-switch stutter between scenes; during a transition both play and `transitionStyles()` (CSS opacity/clip-path/transform) and `transitionVolumes()` mimic xfade/acrossfade.
 
 ## Progress log
+
+### 2026-10-16 — Milestone 6 (Video editor): transitions between scenes (6c)
+- Server: `timelines.schema.ts` gains an optional `transition` on scenes (xfade type names, 100–5000 ms) and a doc-level check (no transition on the first scene, at most half of each joined scene).
+- Client: `transitions.ts` (types, labels, `maxTransitionMs`, `fitTransition(s)`, `transitionStyles`, `transitionVolumes`). `Timeline` places scenes with overlaps, `sceneAt` returns the incoming scene, new `transitionAt`, `setTransition`, `setAllTransitions`; transitions are refitted on every scene edit and a split's second half starts as a hard cut. `TimelinePlayer` drives two video elements (current/outgoing/cued next) and reports `slot` + `transition` progress; `PreviewPlayer` styles both layers. Scene inspector has a transition picker with length (clamped, max shown), "Jump to just before" and "Use on every cut"; the timeline strip marks transitions over the overlap.
+- Tests: 89 server (+1 transition save/validation), 77 client (+9: transition maths/styles/volumes, Timeline overlap/refit/split, player crossfade + cueing, editor add-transition-and-save flow). typecheck/lint/test/build green; production build smoke-tested in headless Chromium (two WebM scenes with a slide-left transition, scrubbed mid-transition: both videos layered with the expected transforms).
+- Next: 6d auto-zoom/spotlight from recorded clicks (editable on the timeline), then 6f ergonomics.
+- Known issues: overlapping scenes share one row on the timeline strip, so the overlap is only shown by the transition marker; transitions are fitted silently when a trim makes scenes too short (undo restores them).
 
 ### 2026-10-16 — Milestone 6 (Video editor): overlays with keyframes (6b)
 - Server: `timelines.schema.ts` gains `overlay` tracks (text/shape/image content, box, keyframes with order and range checks); `TimelineService` lists project images as sources (no probing) and rejects image overlays whose file isn't an image of the project (and image files used as audio).

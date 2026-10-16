@@ -43,6 +43,10 @@ The editor also adds **text, shape and image overlays** (images come from the pr
 own tracks. Drag an overlay in the preview (or nudge it with the arrow keys) to place it; add keyframes to
 animate its position, scale and opacity, with smooth or linear motion between them, or use "Fade in and
 out" for a quick entrance and exit.
+Select any scene after the first to give it a **transition** from the scene before (crossfade, fade through
+black, wipe or slide). The two scenes overlap for the transition's length, so the video gets that much
+shorter; a transition can last at most half of each scene it joins and is shortened automatically when you
+trim. "Use on every cut" applies the same transition everywhere.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 

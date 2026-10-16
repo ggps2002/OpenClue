@@ -1,7 +1,11 @@
-import { clipLength, type AudioSource, type Timeline } from './Timeline';
+import { clipLength, type AudioSource, type PlacedScene, type Timeline } from './Timeline';
+import { transitionVolumes, type TransitionType } from './transitions';
 
 /** The parts of a media element the player drives; real <video>/<audio> elements satisfy it. */
-export type PlayerMedia = Pick<HTMLMediaElement, 'src' | 'currentTime' | 'muted' | 'paused' | 'play' | 'pause'>;
+export type PlayerMedia = Pick<HTMLMediaElement, 'src' | 'currentTime' | 'muted' | 'volume' | 'paused' | 'play' | 'pause'>;
+
+/** Index of one of the two video elements; scenes alternate between them so the next one can load ahead. */
+export type VideoSlot = 0 | 1;
 
 export interface PlayerClock {
   now(): number;
@@ -12,8 +16,11 @@ export interface PlayerClock {
 export interface PlayerState {
   timeMs: number;
   playing: boolean;
-  /** The scene on screen, or null after the last scene (audio may still be playing). */
+  /** The scene on screen (the incoming one during a transition), or null after the last scene. */
   sceneId: string | null;
+  /** The video element showing `sceneId`; during a transition the other one shows the outgoing scene. */
+  slot: VideoSlot;
+  transition: { type: TransitionType; progress: number } | null;
 }
 
 export interface PlayerOptions {
@@ -33,27 +40,32 @@ const browserClock: PlayerClock = {
   cancelFrame: (id) => cancelAnimationFrame(id),
 };
 
+const slotOf = (index: number): VideoSlot => (index % 2 === 0 ? 0 : 1);
+
 /**
- * Plays a Timeline in the browser: one <video> element shows whichever scene is under the playhead
- * (switching source and seeking as scenes change), and one audio element per audio clip follows along.
- * A wall clock drives the playhead; media elements are corrected when they drift.
+ * Plays a Timeline in the browser. Two <video> elements take turns: even scenes play in one, odd scenes
+ * in the other, so the next scene is loaded and cued while the current one plays, and both can show
+ * during a transition. One audio element per audio clip follows along. A wall clock drives the
+ * playhead; media elements are corrected when they drift.
  */
 export class TimelinePlayer {
   private timeline: Timeline | null = null;
   private timeMs = 0;
   private playing = false;
   private sceneId: string | null = null;
+  private slot: VideoSlot = 0;
+  private transition: PlayerState['transition'] = null;
   private startedAt = 0;
   private startedFrom = 0;
   private frame: number | null = null;
-  private videoUrl: string | null = null;
+  private readonly videoUrls: [string | null, string | null] = [null, null];
   private readonly audio = new Map<string, { element: PlayerMedia; url: string | null }>();
   private readonly listeners = new Set<(state: PlayerState) => void>();
   private readonly clock: PlayerClock;
   private readonly createAudio: () => PlayerMedia;
 
   constructor(
-    private readonly video: PlayerMedia,
+    private readonly videos: readonly [PlayerMedia, PlayerMedia],
     private readonly options: PlayerOptions,
   ) {
     this.clock = options.clock ?? browserClock;
@@ -61,7 +73,7 @@ export class TimelinePlayer {
   }
 
   get state(): PlayerState {
-    return { timeMs: this.timeMs, playing: this.playing, sceneId: this.sceneId };
+    return { timeMs: this.timeMs, playing: this.playing, sceneId: this.sceneId, slot: this.slot, transition: this.transition };
   }
 
   /** Swaps in an edited timeline, keeping the playhead (clamped to the new length). */
@@ -115,7 +127,7 @@ export class TimelinePlayer {
   destroy(): void {
     this.cancel();
     this.playing = false;
-    this.video.pause();
+    this.videos.forEach((video) => video.pause());
     this.audio.forEach(({ element }) => element.pause());
     this.audio.clear();
     this.listeners.clear();
@@ -152,18 +164,19 @@ export class TimelinePlayer {
     const tolerance = exact || !this.playing ? PAUSED_DRIFT_S : PLAYING_DRIFT_S;
     const timeline = this.timeline;
     const hit = timeline?.sceneAt(this.timeMs) ?? null;
+    const transition = timeline?.transitionAt(this.timeMs) ?? null;
     this.sceneId = hit?.scene.id ?? null;
+    this.slot = hit ? slotOf(hit.index) : this.slot;
+    this.transition = transition && { type: transition.type, progress: transition.progress };
+    const volumes = transition ? transitionVolumes(transition.type, transition.progress) : { from: 1, to: 1 };
 
-    const url = hit ? this.options.resolveUrl({ type: 'media', mediaId: hit.scene.mediaId }) : null;
-    if (hit && url) {
-      if (url !== this.videoUrl) {
-        this.video.src = url;
-        this.videoUrl = url;
-      }
-      this.video.muted = hit.scene.muted;
-      follow(this.video, hit.sourceMs / 1000, this.playing, tolerance);
-    } else if (!this.video.paused) {
-      this.video.pause();
+    // Each slot shows the scene on screen, the scene being transitioned away from, or cues the next one.
+    const next = timeline && hit ? timeline.placements()[hit.index + 1] : undefined;
+    for (const slot of [0, 1] as const) {
+      if (hit && slotOf(hit.index) === slot) this.showScene(slot, hit, hit.sourceMs, volumes.to, tolerance);
+      else if (transition && slotOf(transition.from.index) === slot) this.showScene(slot, transition.from, transition.from.sourceMs, volumes.from, tolerance);
+      else if (next && slotOf(next.index) === slot) this.cueScene(slot, next);
+      else if (!this.videos[slot].paused) this.videos[slot].pause();
     }
 
     for (const track of timeline?.audioTracks ?? []) {
@@ -177,6 +190,33 @@ export class TimelinePlayer {
     }
     const state = this.state;
     this.listeners.forEach((listener) => listener(state));
+  }
+
+  /** Plays (or holds, when paused) `placed` in `slot` at `sourceMs`. */
+  private showScene(slot: VideoSlot, placed: PlacedScene, sourceMs: number, volume: number, tolerance: number): void {
+    const video = this.videos[slot];
+    if (!this.load(slot, placed)) {
+      if (!video.paused) video.pause();
+      return;
+    }
+    video.muted = placed.scene.muted;
+    video.volume = volume;
+    follow(video, sourceMs / 1000, this.playing, tolerance);
+  }
+
+  /** Loads the scene that comes next and parks it on its first frame. */
+  private cueScene(slot: VideoSlot, placed: PlacedScene): void {
+    if (this.load(slot, placed)) follow(this.videos[slot], placed.scene.inMs / 1000, false, PLAYING_DRIFT_S);
+  }
+
+  /** Points the slot's element at the scene's file; false when the file can't be played. */
+  private load(slot: VideoSlot, placed: PlacedScene): boolean {
+    const url = this.options.resolveUrl({ type: 'media', mediaId: placed.scene.mediaId });
+    if (url && url !== this.videoUrls[slot]) {
+      this.videos[slot].src = url;
+      this.videoUrls[slot] = url;
+    }
+    return url !== null;
   }
 
   private audioFor(clipId: string, source: AudioSource) {

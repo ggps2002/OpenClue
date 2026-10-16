@@ -195,6 +195,23 @@ describe('TimelineService', () => {
     expect(parse([])).toBe(false);
   });
 
+  it('saves transitions and keeps them within half of each scene they join', async () => {
+    const withTransition = (sceneIndex: number, transition: TimelineDoc['scenes'][number]['transition']) => {
+      const base = doc(videoId);
+      base.scenes[sceneIndex] = { ...base.scenes[sceneIndex], transition };
+      return base;
+    };
+    // Both scenes are 800 ms long, so 400 ms is the longest transition between them.
+    const saved = await service.save(owner.id, projectId, withTransition(1, { type: 'fade', durationMs: 400 }));
+    expect(saved.timeline?.scenes[1].transition).toEqual({ type: 'fade', durationMs: 400 });
+    const parse = (d: TimelineDoc) => timelineDocSchema.safeParse(d).success;
+    expect(parse(withTransition(1, null))).toBe(true);
+    expect(parse(withTransition(1, { type: 'slideleft', durationMs: 401 }))).toBe(false);
+    expect(parse(withTransition(1, { type: 'fade', durationMs: 50 }))).toBe(false);
+    expect(parse(withTransition(0, { type: 'fade', durationMs: 200 }))).toBe(false);
+    expect(parse(withTransition(1, { type: 'spin' as 'fade', durationMs: 200 }))).toBe(false);
+  });
+
   it('is removed with its project', async () => {
     await service.create(owner.id, projectId);
     await projects.delete(owner.id, projectId);

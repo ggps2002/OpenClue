@@ -7,6 +7,7 @@ import { createOverlay, type OverlayKind } from './overlays';
 import { clipLength, type Timeline } from './Timeline';
 import type { TimelineSource } from './timeline.api';
 import type { Selection } from './TimelineStrip';
+import { TransitionFields } from './TransitionFields';
 
 interface InspectorProps {
   timeline: Timeline;
@@ -42,7 +43,7 @@ export function Inspector(props: InspectorProps) {
   );
 }
 
-function SceneInspector({ timeline, sources, timeMs, canEdit, apply, onSelect, placed }: InspectorProps & { placed: NonNullable<ReturnType<Timeline['placement']>> }) {
+function SceneInspector({ timeline, sources, timeMs, canEdit, apply, onSelect, onSeek, placed }: InspectorProps & { placed: NonNullable<ReturnType<Timeline['placement']>> }) {
   const { scene, index, startMs, endMs } = placed;
   const source = sources.find((s) => s.id === scene.mediaId);
   const maxOut = source?.durationMs ?? Infinity;
@@ -100,6 +101,7 @@ function SceneInspector({ timeline, sources, timeMs, canEdit, apply, onSelect, p
           </div>
         </>
       )}
+      {index > 0 && <TransitionFields timeline={timeline} sceneIndex={index} canEdit={canEdit} apply={apply} onSeek={onSeek} />}
     </div>
   );
 }
