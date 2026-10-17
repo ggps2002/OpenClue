@@ -161,6 +161,7 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
         onSelect={setSelection}
         onSeek={player.seek}
         onMoveScene={(id, index) => apply((t) => t.moveScene(id, index))}
+        onEdit={apply}
       />
     </div>
   );

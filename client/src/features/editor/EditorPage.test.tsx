@@ -137,6 +137,49 @@ describe('EditorPage', () => {
     expect(saved.timeline.scenes[1].transition).toEqual({ type: 'fade', durationMs: 2000 });
   });
 
+  it('trims, moves and zooms on the timeline strip, one undo step per drag', async () => {
+    const fetchMock = mockApi({
+      'GET /projects/p1': () => respond(200, { project }),
+      'GET /projects/p1/timeline': () => respond(200, withTimeline),
+      'PUT /projects/p1/timeline': (init) => respond(200, { ...withTimeline, timeline: (JSON.parse(String(init?.body)) as { timeline: TimelineDoc }).timeline }),
+    });
+    renderAt('/app/projects/p1/editor');
+
+    const strip = await screen.findByLabelText('Timeline');
+    within(strip).getByRole('slider', { name: 'Trim end of Scene 1' }).focus();
+    await userEvent.keyboard('{Shift>}{ArrowLeft}{/Shift}{ArrowLeft}');
+    expect(within(strip).getByRole('button', { name: /^Scene 1, 0:08.9/ })).toBeInTheDocument();
+
+    // Lanes are 1000 px wide, so with 8.9 s on the strip a 200 px drag is 1.78 s.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 1000, height: 36, right: 1000, bottom: 36, x: 0, y: 0, toJSON: () => ({}) });
+    const clip = within(strip).getByRole('button', { name: 'Voiceover clip at 0:00.0' });
+    fireEvent.pointerDown(clip, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(clip, { clientX: 200, pointerId: 1 });
+    fireEvent.pointerMove(clip, { clientX: 300, pointerId: 1 });
+    expect(within(strip).getByRole('button', { name: 'Voiceover clip at 0:01.7' })).toBeInTheDocument();
+    fireEvent.pointerUp(clip, { clientX: 300, pointerId: 1 });
+    fireEvent.click(within(strip).getByRole('button', { name: 'Voiceover clip at 0:01.7' }), { clientX: 300 });
+    expect(screen.getByText('0:00.0 / 0:09.7')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(within(strip).getByRole('button', { name: 'Voiceover clip at 0:00.0' })).toBeInTheDocument();
+    expect(within(strip).getByRole('button', { name: /^Scene 1, 0:08.9/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Redo' }));
+
+    await userEvent.click(within(strip).getByRole('button', { name: 'Zoom timeline in' }));
+    await userEvent.click(within(strip).getByRole('button', { name: 'Zoom timeline in' }));
+    expect(within(strip).getByLabelText('Timeline zoom 400%')).toBeInTheDocument();
+    expect((within(strip).getByTestId('timeline-scroller').firstElementChild as HTMLElement).style.width).toBe('400%');
+    await userEvent.click(within(strip).getByRole('button', { name: 'Fit' }));
+    expect(within(strip).getByLabelText('Timeline zoom 100%')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument();
+    const saved = sentBody(fetchMock, 'PUT') as { timeline: TimelineDoc };
+    expect(saved.timeline.scenes[0].outMs).toBe(8900);
+    expect(saved.timeline.tracks[0].clips[0].startMs).toBe(1780);
+  });
+
   it('reorders and deletes scenes from the inspector', async () => {
     const twoScenes = { ...doc, scenes: [...doc.scenes, { id: 's2', name: 'Outro', mediaId: 'm0', inMs: 0, outMs: 4000, muted: false }] };
     mockApi({
@@ -149,7 +192,7 @@ describe('EditorPage', () => {
     await userEvent.click(within(strip).getByRole('button', { name: /^Outro/ }));
     expect(screen.getByText('From old-take.webm')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Move earlier' }));
-    const names = () => within(strip).getAllByRole('button', { pressed: undefined }).map((b) => b.getAttribute('aria-label')?.split(',')[0]);
+    const names = () => within(strip).getAllByRole('button', { name: /, \d/ }).map((b) => b.getAttribute('aria-label')?.split(',')[0]);
     expect(names().slice(0, 2)).toEqual(['Outro', 'Scene 1']);
     await userEvent.click(screen.getByRole('button', { name: 'Delete scene' }));
     expect(within(strip).queryByRole('button', { name: /^Outro/ })).not.toBeInTheDocument();

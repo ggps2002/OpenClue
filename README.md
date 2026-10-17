@@ -53,6 +53,11 @@ You can also add a zoom at the playhead. Selecting a zoom (in the scene's list o
 timeline) shows its framing on the preview: drag the outline to change what it zooms in on, and set its
 start, length, strength (up to 400%) and an optional spotlight that dims everything around the focus point.
 Zooms follow the source video, so they stay with their moment when you trim, split or reorder scenes.
+**On the timeline strip** drag a scene's edges to trim it, drag audio clips, overlays and zoom markers to
+move them, and drag the right edge of a selected overlay or zoom to change its length (or focus an edge or
+clip and use the arrow keys: 0.1 s, 1 s with Shift). Dragged edges snap to the playhead and scene cuts;
+hold Alt to move freely. Each drag is one undo step. The − / + buttons zoom the strip in up to 3200%
+(scroll sideways; the playhead stays in view) and "Fit" shows the whole edit again.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
