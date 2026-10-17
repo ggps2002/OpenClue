@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from '../src/config/env';
 import { prisma } from '../src/lib/prisma';
+import { FfmpegService, parseDurationMs } from '../src/lib/ffmpeg';
 import { StorageService } from '../src/lib/storage';
 import { MediaService } from '../src/modules/media/media.service';
 import { ProjectService } from '../src/modules/projects/projects.service';
@@ -12,9 +13,11 @@ import { RecordingService, normalizeClicks } from '../src/modules/recordings/rec
 import { createApp, resetDatabase, signUpUser, type TestUser } from './helpers';
 
 const app = createApp();
-const media = new MediaService(new StorageService());
-const service = new RecordingService(media);
-const projects = new ProjectService();
+const storage = new StorageService();
+const media = new MediaService(storage);
+const ffmpeg = new FfmpegService();
+const service = new RecordingService(media, storage, ffmpeg);
+const projects = new ProjectService(storage);
 afterAll(() => fs.rmSync(env.storageDir, { recursive: true, force: true }));
 
 const metadata = {
@@ -80,6 +83,20 @@ describe('RecordingService', () => {
     const plain = await media.upload(owner.id, owner.workspaceId, tempUpload('clip.mp4', 'video/mp4'));
     expect(plain.recording).toBeNull();
     await expect(service.get(owner.id, plain.id)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('remuxes real WebM recordings so they get a duration header', async () => {
+    const upload = tempUpload('rec.webm', 'video/webm');
+    // `-live 1` mimics MediaRecorder output, which has no duration.
+    await ffmpeg.exec(['-y', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=160x120:rate=10', '-c:v', 'libvpx', '-live', '1', '-f', 'webm', upload.path]);
+    upload.size = fs.statSync(upload.path).size;
+
+    const asset = await service.create(owner.id, owner.workspaceId, upload, { ...metadata, durationMs: 1000, clicks: [] });
+    const { filePath } = await media.getFile(owner.id, asset.id);
+    const { stderr } = await ffmpeg.run(['-i', filePath]);
+    expect(parseDurationMs(stderr)).toBeGreaterThanOrEqual(900);
+    expect(asset.sizeBytes).toBe(fs.statSync(filePath).size);
+    expect(fs.readdirSync(storage.tmpDir)).toEqual([]);
   });
 
   it('deletes the recording metadata with its media asset', async () => {

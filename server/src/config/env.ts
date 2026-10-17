@@ -20,6 +20,9 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-sonnet-5-5'),
   OPENAI_API_KEY: z.string().optional(),
+  STT_MODEL: z.string().default('whisper-1'),
+  TTS_MODEL: z.string().default('gpt-4o-mini-tts'),
+  RENDER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(1),
 });
 
 function loadEnv() {

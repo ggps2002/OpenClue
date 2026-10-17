@@ -1,5 +1,8 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import type { FfmpegService } from '../../lib/ffmpeg';
 import { prisma } from '../../lib/prisma';
+import type { StorageService } from '../../lib/storage';
 import { HttpError } from '../../middleware/error';
 import { detectMediaKind, type MediaAssetDto, type MediaService, type UploadedFile } from '../media/media.service';
 import { clickSchema, SURFACES, type Click, type RecordingMetadata } from './recordings.schema';
@@ -16,7 +19,11 @@ export interface RecordingDto {
 }
 
 export class RecordingService {
-  constructor(private readonly media: MediaService) {}
+  constructor(
+    private readonly media: MediaService,
+    private readonly storage: StorageService,
+    private readonly ffmpeg: FfmpegService,
+  ) {}
 
   /** Stores a browser recording as a video media asset plus its capture metadata. */
   async create(
@@ -30,7 +37,8 @@ export class RecordingService {
       await fs.promises.rm(file.path, { force: true });
       throw new HttpError(415, 'A recording must be a video file');
     }
-    const asset = await this.media.upload(userId, workspaceId, file, projectId);
+    const uploaded = await this.media.upload(userId, workspaceId, file, projectId);
+    const asset = await this.makeSeekable(uploaded);
     const clicks = normalizeClicks(metadata.clicks, metadata.durationMs);
     try {
       await prisma.recording.create({
@@ -50,6 +58,28 @@ export class RecordingService {
       throw err;
     }
     return { ...asset, recording: { durationMs: metadata.durationMs, clickCount: clicks.length } };
+  }
+
+  /**
+   * MediaRecorder WebM files have no duration or seek index, so players can't seek them.
+   * A copy-remux through ffmpeg adds both. Best effort: on failure the original file is kept.
+   */
+  private async makeSeekable(asset: MediaAssetDto): Promise<MediaAssetDto> {
+    const stored = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    const filePath = this.storage.resolve(stored.storageKey);
+    const tmpKey = this.storage.createKey('tmp', stored.storageKey);
+    const tmpPath = this.storage.resolve(tmpKey);
+    try {
+      await this.ffmpeg.remux(filePath, tmpPath);
+      await fs.promises.rename(tmpPath, filePath);
+      const { size } = await fs.promises.stat(filePath);
+      await prisma.mediaAsset.update({ where: { id: asset.id }, data: { sizeBytes: size } });
+      return { ...asset, sizeBytes: size };
+    } catch (err) {
+      console.warn(`[recordings] could not remux ${path.basename(filePath)}; keeping the original`, (err as Error).message);
+      await this.storage.remove(tmpKey);
+      return asset;
+    }
   }
 
   async get(userId: string, mediaId: string): Promise<RecordingDto> {

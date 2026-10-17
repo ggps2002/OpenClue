@@ -1,13 +1,14 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/lib/prisma';
+import { StorageService } from '../src/lib/storage';
 import { ProjectService } from '../src/modules/projects/projects.service';
 import { createApp, resetDatabase, signUpUser, type TestUser } from './helpers';
 
 const app = createApp();
 
 describe('ProjectService', () => {
-  const service = new ProjectService();
+  const service = new ProjectService(new StorageService());
   let owner: TestUser;
   let outsider: TestUser;
 

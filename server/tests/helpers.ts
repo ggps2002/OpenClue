@@ -8,6 +8,14 @@ export function createApp() {
 }
 
 export async function resetDatabase(): Promise<void> {
+  await prisma.usageEvent.deleteMany();
+  await prisma.export.deleteMany();
+  await prisma.timeline.deleteMany();
+  await prisma.captionTrack.deleteMany();
+  await prisma.voiceoverClip.deleteMany();
+  await prisma.voiceover.deleteMany();
+  await prisma.script.deleteMany();
+  await prisma.transcript.deleteMany();
   await prisma.recording.deleteMany();
   await prisma.mediaAsset.deleteMany();
   await prisma.project.deleteMany();

@@ -26,6 +26,54 @@ Use **Record** (sidebar, dashboard or a project page) to capture your screen and
 the browser; clicks inside the OpenClue tab are saved with the recording for automatic zooms later.
 Screen recording needs a desktop browser with `getDisplayMedia` (recent Chrome, Edge or Firefox) and a
 secure context (`localhost` or HTTPS).
+Open a project and choose **Script**: OpenClue transcribes a recording's narration (OpenAI speech-to-text),
+has Claude rewrite it into a clean script split into timed segments, and lets you edit, split, merge and
+re-time the segments next to a synced player. Without API keys a placeholder transcript and a built-in
+cleanup are used instead, so the flow still works end to end.
+On the same page, **AI voiceover** speaks each segment with a voice you pick (OpenAI text-to-speech),
+speeds up lines that run a little long so they fit their slot, and mixes everything into one track you can
+play in sync with the video. Only changed segments are re-voiced, and any single segment can be
+regenerated. Without an OpenAI key each segment gets silent audio of the right length instead.
+Choose **Edit video** on a project to open the editor: it starts from one project video (plus the voiceover
+on its own track), and lets you split scenes at the playhead, trim their start and end, reorder them (drag or
+buttons), mute a scene's own sound, add more project videos as scenes, and move or mute audio clips, with
+undo/redo and a live preview that plays the edit across scenes. Keyboard: Space plays/pauses, S splits,
+Ctrl+Z / Ctrl+Shift+Z undo and redo.
+The editor also adds **text, shape and image overlays** (images come from the project's uploads) on their
+own tracks. Drag an overlay in the preview (or nudge it with the arrow keys) to place it; add keyframes to
+animate its position, scale and opacity, with smooth or linear motion between them, or use "Fade in and
+out" for a quick entrance and exit.
+Select any scene after the first to give it a **transition** from the scene before (crossfade, fade through
+black, wipe or slide). The two scenes overlap for the transition's length, so the video gets that much
+shorter; a transition can last at most half of each scene it joins and is shortened automatically when you
+trim. "Use on every cut" applies the same transition everywhere.
+**Zoom and spotlight:** a scene recorded in OpenClue offers "Auto-zoom from N clicks", which zooms in on
+the places you clicked (nearby clicks share one zoom; the camera eases in a little before and holds after).
+You can also add a zoom at the playhead. Selecting a zoom (in the scene's list or the violet marker on the
+timeline) shows its framing on the preview: drag the outline to change what it zooms in on, and set its
+start, length, strength (up to 400%) and an optional spotlight that dims everything around the focus point.
+Zooms follow the source video, so they stay with their moment when you trim, split or reorder scenes.
+**On the timeline strip** drag a scene's edges to trim it, drag audio clips, overlays and zoom markers to
+move them, and drag the right edge of a selected overlay or zoom to change its length (or focus an edge or
+clip and use the arrow keys: 0.1 s, 1 s with Shift). Dragged edges snap to the playhead and scene cuts;
+hold Alt to move freely. Each drag is one undo step. The − / + buttons zoom the strip in up to 3200%
+(scroll sideways; the playhead stays in view) and "Fit" shows the whole edit again.
+**Captions:** choose **Captions** on a project to turn the script into short on-screen lines (up to two lines
+of a chosen length per caption). Each caption is timed to the voiceover clip of its segment when there is
+one, otherwise it fills the segment. Pick a style preset (Clean, Bold, Subtle, Banner, Typewriter), then
+change font, size, colours, outline, background box and position; edit, split, merge or re-time any caption
+next to a preview that plays with the voiceover. Captions show in the editor preview too (they follow the
+voiceover clip, or the scenes cut from the script's video). **Download SRT / VTT** exports them timed to the
+edited video when there is an edit, or to the original recording. If the script or voiceover changes later,
+the page offers to rebuild them.
+**Export:** choose **Export** on a project (or in the editor) to render the last saved edit on the server:
+an **MP4** (1080p or 720p, with sound) or an **animated GIF** (640 or 480 px wide, no sound, up to 60 s).
+Scenes keep their trims and transitions, scene sound fades across transitions, and audio tracks (voiceover,
+music) are mixed in. Renders wait in an in-process queue (`RENDER_CONCURRENCY` at a time) and the page shows
+live progress; when one is ready you can preview it, download it, or delete it. Deleting a render that is
+still running stops it. The page also shows how many minutes you have exported this month (deleting an
+export doesn't give minutes back). Overlays, zooms and captions are not burned into renders yet.
+Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
 ## Scripts (run from the repo root)
@@ -56,6 +104,9 @@ Set in `server/.env` (copied from `server/.env.example` on install). Never commi
 | `ANTHROPIC_API_KEY` | _(empty)_            | Enables Claude for scripts, docs, translation and planning    |
 | `AI_MODEL`          | `claude-sonnet-5-5`  | Claude model id                                               |
 | `OPENAI_API_KEY`    | _(empty)_            | Enables speech-to-text and text-to-speech                     |
+| `STT_MODEL`         | `whisper-1`          | OpenAI speech-to-text model (must return segment timestamps)  |
+| `TTS_MODEL`         | `gpt-4o-mini-tts`    | OpenAI text-to-speech model used for voiceovers               |
+| `RENDER_CONCURRENCY`| `1`                  | How many exports render at once (one ffmpeg process each, 1–8) |
 
 ## Project layout
 
@@ -68,7 +119,7 @@ client/              React 18 + Vite + Tailwind web app
 server/              Express 5 API
   src/server.ts      the single entry point (Server class)
   src/config/        typed env loading
-  src/lib/           Prisma client and shared service classes
+  src/lib/           Prisma client, FfmpegService, StorageService, JobQueue, AI clients (Claude, speech)
   src/middleware/    auth, errors, uploads
   src/modules/       one folder per feature: controller + service (+ zod schema)
   prisma/            schema.prisma and the SQLite database

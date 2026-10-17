@@ -86,7 +86,7 @@ describe('auth routes', () => {
 
   it('reports health and 404s unknown API routes', async () => {
     const health = await request(app).get('/api/health').expect(200);
-    expect(health.body).toEqual({ status: 'ok', aiMode: 'offline' });
+    expect(health.body).toEqual({ status: 'ok', aiMode: 'offline', speechMode: 'offline' });
     await request(app).get('/api/nope').expect(404);
   });
 });

@@ -1,12 +1,16 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SignInPage } from '../features/auth/SignInPage';
 import { SignUpPage } from '../features/auth/SignUpPage';
+import { CaptionsPage } from '../features/captions/CaptionsPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { EditorPage } from '../features/editor/EditorPage';
+import { ExportPage } from '../features/exports/ExportPage';
 import { LandingPage } from '../features/landing/LandingPage';
 import { MediaLibraryPage } from '../features/media/MediaLibraryPage';
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
 import { RecordPage } from '../features/recorder/RecordPage';
+import { ScriptPage } from '../features/script/ScriptPage';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from './AuthProvider';
 import { RequireAuth } from './RequireAuth';
@@ -31,6 +35,10 @@ export function AppRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="projects/:projectId/script" element={<ScriptPage />} />
+        <Route path="projects/:projectId/captions" element={<CaptionsPage />} />
+        <Route path="projects/:projectId/editor" element={<EditorPage />} />
+        <Route path="projects/:projectId/export" element={<ExportPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
         <Route path="record" element={<RecordPage />} />
       </Route>

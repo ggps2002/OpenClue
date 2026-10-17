@@ -19,6 +19,8 @@ model User {
   memberships  Membership[]
   projects     Project[]
   mediaAssets  MediaAsset[]
+  exports      Export[]
+  usageEvents  UsageEvent[]
 }
 
 model Workspace {
@@ -55,6 +57,9 @@ model Project {
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
   mediaAssets MediaAsset[]
+  scripts     Script[]
+  timeline    Timeline?
+  exports     Export[]
 
   @@index([workspaceId])
 }
@@ -63,20 +68,24 @@ model Project {
 // and is cleared (not cascaded) when the project is deleted.
 // kind: "video" | "image" | "audio" | "pdf" | "slides"
 model MediaAsset {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   kind         String
   originalName String
   mimeType     String
   sizeBytes    Int
-  storageKey   String    @unique
+  // Probed lazily with ffmpeg the first time the editor needs it (video/audio only).
+  durationMs   Int?
+  storageKey   String      @unique
   workspaceId  String
   projectId    String?
   uploadedById String
-  createdAt    DateTime  @default(now())
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  uploadedBy   User      @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy   User        @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
   recording    Recording?
+  transcript   Transcript?
+  scripts      Script[]
 
   @@index([workspaceId])
   @@index([projectId])
@@ -97,4 +106,146 @@ model Recording {
   clicks       Json
   createdAt    DateTime   @default(now())
   mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+}
+
+// Speech-to-text of a video or audio asset. segments is a JSON array of { startMs, endMs, text }.
+// source: "openai" | "offline" (placeholder output when no OpenAI key is configured).
+model Transcript {
+  id           String     @id @default(cuid())
+  mediaAssetId String     @unique
+  language     String
+  source       String
+  segments     Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+}
+
+// The narration script of a project's video: JSON array of { id, startMs, endMs, text }.
+// One script per project and language (translations arrive in milestone 10).
+// source: "claude" | "offline" (how the first draft was written; user edits keep it).
+model Script {
+  id            String      @id @default(cuid())
+  projectId     String
+  language      String      @default("en")
+  sourceMediaId String?
+  source        String
+  segments      Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceMedia   MediaAsset? @relation(fields: [sourceMediaId], references: [id], onDelete: SetNull)
+  voiceover     Voiceover?
+  captions      CaptionTrack?
+
+  @@unique([projectId, language])
+  @@index([sourceMediaId])
+}
+
+// The spoken narration of a script. trackKey is the storage key of all clips mixed at their
+// segment start times (rebuilt after every generation). voice is the last voice picked.
+model Voiceover {
+  id              String          @id @default(cuid())
+  scriptId        String          @unique
+  voice           String
+  trackKey        String?
+  trackDurationMs Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  script          Script          @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  clips           VoiceoverClip[]
+}
+
+// TTS audio for one script segment. text/startMs/endMs/voice are what the clip was made from,
+// so the clip counts as stale once the segment changes. tempo > 1 means it was sped up to fit.
+// source: "openai" | "offline" (silence of the segment's length when no OpenAI key is set).
+model VoiceoverClip {
+  id          String    @id @default(cuid())
+  voiceoverId String
+  segmentId   String
+  text        String
+  startMs     Int
+  endMs       Int
+  voice       String
+  storageKey  String    @unique
+  durationMs  Int
+  tempo       Float
+  source      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  voiceover   Voiceover @relation(fields: [voiceoverId], references: [id], onDelete: Cascade)
+
+  @@unique([voiceoverId, segmentId])
+}
+
+// The edit of a project's video. data is the JSON timeline document validated by
+// modules/timelines/timelines.schema.ts: { version, scenes, tracks }.
+model Timeline {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// On-screen captions of a script: cues is a JSON array of { id, startMs, endMs, text } on the script's
+// clock (text may hold one line break), style the caption look (modules/captions/captions.schema.ts).
+// timing: "voiceover" when cue ends followed the spoken clips, "script" when they used segment slots.
+// generatedAt is when the cues were last built from the script; later script/voiceover changes make them stale.
+model CaptionTrack {
+  id              String   @id @default(cuid())
+  scriptId        String   @unique
+  cues            Json
+  style           Json
+  maxCharsPerLine Int
+  maxLines        Int
+  timing          String
+  generatedAt     DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  script          Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+}
+
+// A render of a project's timeline to a file, made by the in-process render queue.
+// format: "mp4" | "gif"; quality: "720p" | "1080p" (mp4) or "small" | "medium" (gif).
+// status: "queued" | "rendering" | "done" | "failed"; progress is 0..1 while rendering.
+// durationMs is the length of the edit when it was queued (what usage is charged for).
+model Export {
+  id          String    @id @default(cuid())
+  projectId   String
+  createdById String
+  format      String
+  quality     String
+  width       Int
+  height      Int
+  fps         Int
+  status      String    @default("queued")
+  progress    Float     @default(0)
+  durationMs  Int
+  storageKey  String    @unique
+  sizeBytes   Int?
+  error       String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// Metered usage, kept apart from what it measured so deleting an export or a project doesn't refund it.
+// kind: "export" (amount = rendered milliseconds). workspaceId is informational (no relation).
+model UsageEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  kind        String
+  amount      Int
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
 }
