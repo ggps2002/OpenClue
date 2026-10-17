@@ -86,6 +86,9 @@ export function ProjectDetailPage() {
           <Link to={`/app/projects/${current.id}/script`} className={buttonClasses('primary')}>
             Script
           </Link>
+          <Link to={`/app/projects/${current.id}/captions`} className={buttonClasses('secondary')}>
+            Captions
+          </Link>
           <Link to={`/app/projects/${current.id}/editor`} className={buttonClasses('primary')}>
             Edit video
           </Link>

@@ -117,7 +117,7 @@ export function SegmentRow(props: SegmentRowProps) {
   );
 }
 
-function TimeInput({ id, label, value, onChange }: { id: string; label: string; value: number; onChange(ms: number): void }) {
+export function TimeInput({ id, label, value, onChange }: { id: string; label: string; value: number; onChange(ms: number): void }) {
   return (
     <span className="flex items-center gap-1">
       <label htmlFor={id} className="text-xs text-slate-600">

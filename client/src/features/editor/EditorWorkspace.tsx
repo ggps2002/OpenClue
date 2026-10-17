@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
+import { useAsync } from '../../lib/useAsync';
+import { CaptionLayer } from '../captions/CaptionLayer';
+import { captionsApi } from '../captions/captions.api';
+import { cuesOnTimeline } from '../captions/cues';
 import { Inspector } from './Inspector';
 import { OverlayLayer } from './OverlayLayer';
 import { setValuesAt } from './overlays';
@@ -35,6 +40,12 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
     const { incoming, outgoing } = timeline.zoomsAt(timeMs);
     return { incoming: incoming?.zoomId === framingZoomId ? null : incoming, outgoing };
   }, [timeline, timeMs, framingZoomId]);
+  const captions = useAsync(useCallback(() => captionsApi.get(data.projectId).then((r) => r.captions), [data.projectId])).data;
+  const [showCaptions, setShowCaptions] = useState(true);
+  const captionCues = useMemo(
+    () => (captions ? cuesOnTimeline(captions.cues, timeline, captions.sourceMediaId) : null),
+    [captions, timeline],
+  );
   const imageUrls = useMemo(() => new Map(data.sources.filter((s) => s.kind === 'image').map((s) => [s.id, s.url])), [data.sources]);
 
   const save = async () => {
@@ -111,6 +122,18 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
       )}
       {!canEdit && <p className="text-sm text-slate-500">You can watch this edit; only editors can change it.</p>}
       {error && <Alert>{error}</Alert>}
+      {captions && (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={showCaptions} disabled={!captionCues} onChange={(e) => setShowCaptions(e.target.checked)} />
+            Show captions
+          </label>
+          {!captionCues && <span className="text-slate-500">The edit uses neither the voiceover nor the script's video, so captions have nothing to follow.</span>}
+          <Link to={`/app/projects/${data.projectId}/captions`} className="font-medium text-indigo-600 hover:underline">
+            Edit captions
+          </Link>
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <PreviewPlayer
           videoRefs={player.videoRefs}
@@ -140,6 +163,7 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
             onSelect={(clipId) => setSelection({ kind: 'overlay', clipId })}
             onMove={(clipId, localMs, position) => apply((t) => t.updateOverlay(clipId, (c) => setValuesAt(c, localMs, position)))}
           />
+          {captions && captionCues && showCaptions && <CaptionLayer cues={captionCues} style={captions.style} timeMs={timeMs} />}
         </PreviewPlayer>
         <Inspector
           timeline={timeline}

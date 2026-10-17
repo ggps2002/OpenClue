@@ -133,6 +133,7 @@ model Script {
   project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sourceMedia   MediaAsset? @relation(fields: [sourceMediaId], references: [id], onDelete: SetNull)
   voiceover     Voiceover?
+  captions      CaptionTrack?
 
   @@unique([projectId, language])
   @@index([sourceMediaId])
@@ -183,4 +184,22 @@ model Timeline {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// On-screen captions of a script: cues is a JSON array of { id, startMs, endMs, text } on the script's
+// clock (text may hold one line break), style the caption look (modules/captions/captions.schema.ts).
+// timing: "voiceover" when cue ends followed the spoken clips, "script" when they used segment slots.
+// generatedAt is when the cues were last built from the script; later script/voiceover changes make them stale.
+model CaptionTrack {
+  id              String   @id @default(cuid())
+  scriptId        String   @unique
+  cues            Json
+  style           Json
+  maxCharsPerLine Int
+  maxLines        Int
+  timing          String
+  generatedAt     DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  script          Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
 }

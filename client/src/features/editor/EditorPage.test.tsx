@@ -285,6 +285,33 @@ describe('EditorPage', () => {
     ]);
   });
 
+  it('shows the captions over the preview, following the voiceover clip', async () => {
+    const style = {
+      preset: 'clean', fontFamily: 'sans', fontSize: 0.05, bold: false, uppercase: false, textColor: '#ffffff',
+      outline: false, backgroundColor: '#000000', backgroundOpacity: 0.7, position: 'bottom',
+    };
+    const cues = [
+      { id: 'q1', startMs: 0, endMs: 2000, text: 'Welcome to the tour.' },
+      { id: 'q2', startMs: 2000, endMs: 4000, text: 'Open the settings.' },
+    ];
+    const moved = { ...doc, tracks: [{ ...doc.tracks[0], clips: [{ id: 'c1', source: { type: 'voiceover' }, startMs: 1000, inMs: 0, outMs: 8000 }] }] };
+    mockApi({
+      'GET /projects/p1': () => respond(200, { project }),
+      'GET /projects/p1/timeline': () => respond(200, { ...withTimeline, timeline: moved }),
+      'GET /projects/p1/captions': () => respond(200, { role: 'owner', captions: { id: 'c', projectId: 'p1', sourceMediaId: 'm1', cues, style } }),
+    });
+    renderAt('/app/projects/p1/editor');
+
+    const layer = await screen.findByTestId('caption-layer');
+    // The voiceover starts 1 s into the edit, so nothing is captioned yet.
+    expect(layer).toBeEmptyDOMElement();
+    fireEvent.change(screen.getByLabelText('Playhead'), { target: { value: '3500' } });
+    expect(within(layer).getByText('Open the settings.')).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Show captions'));
+    expect(screen.queryByTestId('caption-layer')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Edit captions' })).toHaveAttribute('href', '/app/projects/p1/captions');
+  });
+
   it('is read-only for viewers', async () => {
     mockApi({
       'GET /projects/p1': () => respond(200, { project: { ...project, role: 'viewer' } }),

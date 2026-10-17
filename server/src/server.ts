@@ -11,6 +11,8 @@ import { StorageService } from './lib/storage';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { CaptionController } from './modules/captions/captions.controller';
+import { CaptionService } from './modules/captions/captions.service';
 import { MediaController } from './modules/media/media.controller';
 import { MediaService } from './modules/media/media.service';
 import { ProjectController } from './modules/projects/projects.controller';
@@ -70,6 +72,8 @@ export class Server {
     this.app.use('/api', new VoiceoverController(voiceovers).router);
     const timelines = new TimelineService(projects, voiceovers, this.storage, this.ffmpeg);
     this.app.use('/api', new TimelineController(timelines).router);
+    const captions = new CaptionService(projects, scripts, voiceovers);
+    this.app.use('/api', new CaptionController(captions).router);
   }
 
   private serveClient(): void {

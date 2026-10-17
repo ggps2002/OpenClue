@@ -58,6 +58,14 @@ move them, and drag the right edge of a selected overlay or zoom to change its l
 clip and use the arrow keys: 0.1 s, 1 s with Shift). Dragged edges snap to the playhead and scene cuts;
 hold Alt to move freely. Each drag is one undo step. The − / + buttons zoom the strip in up to 3200%
 (scroll sideways; the playhead stays in view) and "Fit" shows the whole edit again.
+**Captions:** choose **Captions** on a project to turn the script into short on-screen lines (up to two lines
+of a chosen length per caption). Each caption is timed to the voiceover clip of its segment when there is
+one, otherwise it fills the segment. Pick a style preset (Clean, Bold, Subtle, Banner, Typewriter), then
+change font, size, colours, outline, background box and position; edit, split, merge or re-time any caption
+next to a preview that plays with the voiceover. Captions show in the editor preview too (they follow the
+voiceover clip, or the scenes cut from the script's video). **Download SRT / VTT** exports them timed to the
+edited video when there is an edit, or to the original recording. If the script or voiceover changes later,
+the page offers to rebuild them.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 

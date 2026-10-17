@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SignInPage } from '../features/auth/SignInPage';
 import { SignUpPage } from '../features/auth/SignUpPage';
+import { CaptionsPage } from '../features/captions/CaptionsPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { EditorPage } from '../features/editor/EditorPage';
 import { LandingPage } from '../features/landing/LandingPage';
@@ -34,6 +35,7 @@ export function AppRoutes() {
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="projects/:projectId/script" element={<ScriptPage />} />
+        <Route path="projects/:projectId/captions" element={<CaptionsPage />} />
         <Route path="projects/:projectId/editor" element={<EditorPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
         <Route path="record" element={<RecordPage />} />
