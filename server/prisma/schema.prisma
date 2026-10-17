@@ -19,6 +19,8 @@ model User {
   memberships  Membership[]
   projects     Project[]
   mediaAssets  MediaAsset[]
+  exports      Export[]
+  usageEvents  UsageEvent[]
 }
 
 model Workspace {
@@ -57,6 +59,7 @@ model Project {
   mediaAssets MediaAsset[]
   scripts     Script[]
   timeline    Timeline?
+  exports     Export[]
 
   @@index([workspaceId])
 }
@@ -202,4 +205,47 @@ model CaptionTrack {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   script          Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+}
+
+// A render of a project's timeline to a file, made by the in-process render queue.
+// format: "mp4" | "gif"; quality: "720p" | "1080p" (mp4) or "small" | "medium" (gif).
+// status: "queued" | "rendering" | "done" | "failed"; progress is 0..1 while rendering.
+// durationMs is the length of the edit when it was queued (what usage is charged for).
+model Export {
+  id          String    @id @default(cuid())
+  projectId   String
+  createdById String
+  format      String
+  quality     String
+  width       Int
+  height      Int
+  fps         Int
+  status      String    @default("queued")
+  progress    Float     @default(0)
+  durationMs  Int
+  storageKey  String    @unique
+  sizeBytes   Int?
+  error       String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// Metered usage, kept apart from what it measured so deleting an export or a project doesn't refund it.
+// kind: "export" (amount = rendered milliseconds). workspaceId is informational (no relation).
+model UsageEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  kind        String
+  amount      Int
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
 }

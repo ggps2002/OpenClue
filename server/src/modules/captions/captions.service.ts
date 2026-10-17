@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CaptionTrack } from '@prisma/client';
 import type { Role } from '../../lib/access';
+import { slug } from '../../lib/filename';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../middleware/error';
 import type { ProjectService } from '../projects/projects.service';
@@ -125,7 +126,7 @@ export class CaptionService {
       }
     }
 
-    const base = `${slug(project.name)}.${script.language}`;
+    const base = `${slug(project.name, 'captions')}.${script.language}`;
     return input.format === 'srt'
       ? { filename: `${base}.srt`, contentType: 'application/x-subrip; charset=utf-8', body: toSrt(cues) }
       : { filename: `${base}.vtt`, contentType: 'text/vtt; charset=utf-8', body: toVtt(cues, style.position) };
@@ -176,11 +177,3 @@ const parseStyle = (value: unknown): CaptionStyle => {
 };
 
 const toMaxLines = (n: number): 1 | 2 => (n === 1 ? 1 : 2);
-
-const slug = (name: string) =>
-  name
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'captions';

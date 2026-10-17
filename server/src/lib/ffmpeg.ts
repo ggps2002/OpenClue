@@ -18,6 +18,13 @@ interface RunResult {
   stderr: string;
 }
 
+export interface RunOptions {
+  /** Called with the output time ffmpeg has reached (from its `time=` status lines). */
+  onProgress?: (timeMs: number) => void;
+  /** Aborting kills ffmpeg; the promise then rejects with the signal's reason. */
+  signal?: AbortSignal;
+}
+
 /** Keeps only the tail of stderr so long encodes don't buffer megabytes of progress lines. */
 const STDERR_LIMIT = 64 * 1024;
 
@@ -26,22 +33,36 @@ export class FfmpegService {
   constructor(private readonly binary: string = ffmpegPath ?? 'ffmpeg') {}
 
   /** Runs ffmpeg with `args` and resolves with its exit code and (tail of) stderr; never throws on exit code. */
-  run(args: string[]): Promise<RunResult> {
+  run(args: string[], options: RunOptions = {}): Promise<RunResult> {
+    const { onProgress, signal } = options;
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
       const child = spawn(this.binary, ['-hide_banner', '-nostdin', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const abort = () => child.kill('SIGKILL');
+      signal?.addEventListener('abort', abort, { once: true });
       let stderr = '';
       child.stderr.setEncoding('utf8');
       child.stderr.on('data', (chunk: string) => {
         stderr = (stderr + chunk).slice(-STDERR_LIMIT);
+        if (!onProgress) return;
+        const timeMs = parseLastTimeMs(chunk);
+        if (timeMs !== null) onProgress(timeMs);
       });
       child.on('error', reject);
-      child.on('close', (code) => resolve({ code: code ?? -1, stderr }));
+      child.on('close', (code) => {
+        signal?.removeEventListener('abort', abort);
+        if (signal?.aborted) reject(signal.reason);
+        else resolve({ code: code ?? -1, stderr });
+      });
     });
   }
 
   /** Like `run`, but rejects with an FfmpegError when ffmpeg exits non-zero. */
-  async exec(args: string[]): Promise<void> {
-    const { code, stderr } = await this.run(args);
+  async exec(args: string[], options: RunOptions = {}): Promise<void> {
+    const { code, stderr } = await this.run(args, options);
     if (code !== 0) {
       const lastLine = stderr.trim().split('\n').pop() ?? '';
       throw new FfmpegError(`ffmpeg exited with code ${code}: ${lastLine}`, stderr);

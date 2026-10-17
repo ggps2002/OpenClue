@@ -92,3 +92,24 @@ describe('FfmpegService voiceover audio', () => {
     expect(Math.abs((await ffmpeg.probeDurationMs(empty))! - 1000)).toBeLessThan(80);
   });
 });
+
+describe('FfmpegService progress and cancel', () => {
+  it('reports output time while it runs', async () => {
+    const seen: number[] = [];
+    const out = path.join(dir, 'progress.mp4');
+    await ffmpeg.exec(['-y', '-stats_period', '0.05', '-f', 'lavfi', '-i', 'testsrc=duration=3:size=320x240:rate=25', '-pix_fmt', 'yuv420p', out], {
+      onProgress: (ms) => seen.push(ms),
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(Math.max(...seen)).toBeGreaterThan(2000);
+  });
+
+  it('kills ffmpeg and rejects with the abort reason', async () => {
+    const controller = new AbortController();
+    const reason = new Error('stop');
+    const run = ffmpeg.exec(['-y', '-re', '-f', 'lavfi', '-i', 'testsrc=duration=30', '-f', 'null', '-'], { signal: controller.signal });
+    setTimeout(() => controller.abort(reason), 100);
+    await expect(run).rejects.toBe(reason);
+    await expect(ffmpeg.run(['-version'], { signal: controller.signal })).rejects.toBe(reason);
+  });
+});

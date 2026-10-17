@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert';
-import { Button } from '../../components/ui/Button';
+import { Button, buttonClasses } from '../../components/ui/Button';
 import { useAsync } from '../../lib/useAsync';
 import { CaptionLayer } from '../captions/CaptionLayer';
 import { captionsApi } from '../captions/captions.api';
@@ -117,6 +117,13 @@ export function EditorWorkspace({ data, onSaved, onStartOver }: EditorWorkspaceP
             <Button onClick={() => void save()} disabled={!dirty || saving}>
               Save edit
             </Button>
+            <Link
+              to={`/app/projects/${data.projectId}/export`}
+              className={buttonClasses('secondary')}
+              title={dirty ? 'Exports use the last saved edit' : undefined}
+            >
+              Export
+            </Link>
           </div>
         </div>
       )}

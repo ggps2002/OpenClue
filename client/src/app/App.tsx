@@ -4,6 +4,7 @@ import { SignUpPage } from '../features/auth/SignUpPage';
 import { CaptionsPage } from '../features/captions/CaptionsPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { EditorPage } from '../features/editor/EditorPage';
+import { ExportPage } from '../features/exports/ExportPage';
 import { LandingPage } from '../features/landing/LandingPage';
 import { MediaLibraryPage } from '../features/media/MediaLibraryPage';
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage';
@@ -37,6 +38,7 @@ export function AppRoutes() {
         <Route path="projects/:projectId/script" element={<ScriptPage />} />
         <Route path="projects/:projectId/captions" element={<CaptionsPage />} />
         <Route path="projects/:projectId/editor" element={<EditorPage />} />
+        <Route path="projects/:projectId/export" element={<ExportPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
         <Route path="record" element={<RecordPage />} />
       </Route>

@@ -66,6 +66,13 @@ next to a preview that plays with the voiceover. Captions show in the editor pre
 voiceover clip, or the scenes cut from the script's video). **Download SRT / VTT** exports them timed to the
 edited video when there is an edit, or to the original recording. If the script or voiceover changes later,
 the page offers to rebuild them.
+**Export:** choose **Export** on a project (or in the editor) to render the last saved edit on the server:
+an **MP4** (1080p or 720p, with sound) or an **animated GIF** (640 or 480 px wide, no sound, up to 60 s).
+Scenes keep their trims and transitions, scene sound fades across transitions, and audio tracks (voiceover,
+music) are mixed in. Renders wait in an in-process queue (`RENDER_CONCURRENCY` at a time) and the page shows
+live progress; when one is ready you can preview it, download it, or delete it. Deleting a render that is
+still running stops it. The page also shows how many minutes you have exported this month (deleting an
+export doesn't give minutes back). Overlays, zooms and captions are not burned into renders yet.
 Media processing uses the ffmpeg binary bundled by `ffmpeg-static` (downloaded during `npm install`).
 `npm run dev` creates/updates the SQLite database at `server/prisma/dev.db` automatically.
 
@@ -99,6 +106,7 @@ Set in `server/.env` (copied from `server/.env.example` on install). Never commi
 | `OPENAI_API_KEY`    | _(empty)_            | Enables speech-to-text and text-to-speech                     |
 | `STT_MODEL`         | `whisper-1`          | OpenAI speech-to-text model (must return segment timestamps)  |
 | `TTS_MODEL`         | `gpt-4o-mini-tts`    | OpenAI text-to-speech model used for voiceovers               |
+| `RENDER_CONCURRENCY`| `1`                  | How many exports render at once (one ffmpeg process each, 1–8) |
 
 ## Project layout
 
@@ -111,7 +119,7 @@ client/              React 18 + Vite + Tailwind web app
 server/              Express 5 API
   src/server.ts      the single entry point (Server class)
   src/config/        typed env loading
-  src/lib/           Prisma client, FfmpegService, StorageService, AI clients (Claude, speech)
+  src/lib/           Prisma client, FfmpegService, StorageService, JobQueue, AI clients (Claude, speech)
   src/middleware/    auth, errors, uploads
   src/modules/       one folder per feature: controller + service (+ zod schema)
   prisma/            schema.prisma and the SQLite database

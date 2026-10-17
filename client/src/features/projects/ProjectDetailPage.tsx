@@ -92,6 +92,9 @@ export function ProjectDetailPage() {
           <Link to={`/app/projects/${current.id}/editor`} className={buttonClasses('primary')}>
             Edit video
           </Link>
+          <Link to={`/app/projects/${current.id}/export`} className={buttonClasses('secondary')}>
+            Export
+          </Link>
           {canEdit && (
             <>
               <Link to={`/app/record?projectId=${current.id}`} className={buttonClasses('secondary')}>
